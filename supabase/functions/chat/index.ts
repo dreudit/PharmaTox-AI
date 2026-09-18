@@ -1,7 +1,7 @@
 // =============================================================================
 // DRUGS IA - EDGE FUNCTION `chat`
-// Reçoit un message, récupère le contexte RAG, appelle Claude avec le web
-// search tool, streame la réponse en SSE et enregistre message + citations.
+// Reçoit un message, récupère le contexte RAG, appelle Groq (Llama 3.3 70B)
+// en streaming, streame la réponse en SSE et enregistre message + citations.
 //
 // Contrat SSE consommé par lib/core/network/sse_chat_client.dart :
 //   event: init   data: {conversationId, messageId, citations, sourcesCount}
@@ -9,11 +9,13 @@
 //   event: done   data: {conversationId, messageId, totalLength, latencyMs, citations}
 //   event: error  data: {error}
 //
-// Secrets requis (supabase secrets set ...) :
-//   ANTHROPIC_API_KEY
+// Secret requis (supabase secrets set ...) :
+//   GROQ_API_KEY
 // =============================================================================
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+
+const GROQ_MODEL = 'llama-3.3-70b-versatile';
 
 const SYSTEM_PROMPT = `Tu es Drugs IA, un assistant expert en pharmacologie et toxicologie.
 
@@ -91,33 +93,35 @@ Deno.serve(async (req: Request) => {
         const messageId = crypto.randomUUID();
         push('init', { conversationId, messageId, citations, sourcesCount: citations.length });
 
-        // 4. Appeler l'API Claude en streaming.
-        const anthropicKey = Deno.env.get('ANTHROPIC_API_KEY');
-        if (!anthropicKey) throw new Error('ANTHROPIC_API_KEY manquante.');
+        // 4. Appeler l'API Groq (compatible OpenAI) en streaming.
+        const groqKey = Deno.env.get('GROQ_API_KEY');
+        if (!groqKey) throw new Error('GROQ_API_KEY manquante.');
 
-        const claudeResponse = await fetch('https://api.anthropic.com/v1/messages', {
+        const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
           method: 'POST',
           headers: {
             'content-type': 'application/json',
-            'x-api-key': anthropicKey,
-            'anthropic-version': '2023-06-01',
+            Authorization: `Bearer ${groqKey}`,
           },
           body: JSON.stringify({
-            model: 'claude-sonnet-5',
+            model: GROQ_MODEL,
             max_tokens: 2048,
             temperature: 0.3,
-            system: SYSTEM_PROMPT,
             stream: true,
-            messages: [{ role: 'user', content: message }],
+            messages: [
+              { role: 'system', content: SYSTEM_PROMPT },
+              { role: 'user', content: message },
+            ],
           }),
         });
 
-        if (!claudeResponse.ok || !claudeResponse.body) {
-          throw new Error(`Claude API error: ${claudeResponse.status}`);
+        if (!groqResponse.ok || !groqResponse.body) {
+          const errBody = await groqResponse.text();
+          throw new Error(`Groq API error (${groqResponse.status}): ${errBody}`);
         }
 
         let fullText = '';
-        const reader = claudeResponse.body.getReader();
+        const reader = groqResponse.body.getReader();
         const decoder = new TextDecoder();
         let buffer = '';
 
@@ -135,9 +139,10 @@ Deno.serve(async (req: Request) => {
             if (!dataStr || dataStr === '[DONE]') continue;
             try {
               const evt = JSON.parse(dataStr);
-              if (evt.type === 'content_block_delta' && evt.delta?.text) {
-                fullText += evt.delta.text;
-                push('delta', { text: evt.delta.text });
+              const delta = evt.choices?.[0]?.delta?.content;
+              if (delta) {
+                fullText += delta;
+                push('delta', { text: delta });
               }
             } catch {
               // fragment JSON partiel, ignoré

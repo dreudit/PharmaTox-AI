@@ -72,8 +72,7 @@ flutter run \
 3. Renseigner les secrets des Edge Functions (Dashboard > Edge Functions >
    Secrets, ou en CLI) :
    ```bash
-   supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
-   supabase secrets set GROQ_API_KEY=gsk_...   # utilisé par la fonction `stt`
+   supabase secrets set GROQ_API_KEY=gsk_...   # utilisé par `chat` (Llama 3.3 70B) et `stt` (Whisper)
    ```
 4. Déployer les fonctions :
    ```bash
@@ -85,7 +84,7 @@ flutter run \
 5. Activer les providers d'authentification souhaités (Email, Google) dans
    Auth > Providers du dashboard.
 
-Aucune de ces clés (`ANTHROPIC_API_KEY`, `GROQ_API_KEY`, le jeton d'accès
+Aucune de ces clés (`GROQ_API_KEY`, le jeton d'accès
 `sbp_...`) ne doit jamais être commitée dans ce dépôt : elles vivent
 uniquement dans les secrets Supabase, jamais dans le code Flutter ni dans
 `supabase/config.toml`.
