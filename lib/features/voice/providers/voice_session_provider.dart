@@ -10,7 +10,6 @@
 // transcription de fichiers audio importés) mais n'est pas sur ce chemin.
 // =============================================================================
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -122,13 +121,13 @@ class VoiceSessionNotifier extends StateNotifier<VoiceSessionUiState> {
 
     state = state.copyWith(sessionState: VoiceSessionState.listening, liveTranscript: '');
     await _speech.listen(
-      localeId: 'fr_FR',
       onResult: (result) {
         state = state.copyWith(liveTranscript: result.recognizedWords);
         if (result.finalResult && result.recognizedWords.trim().isNotEmpty) {
           _handleUserUtterance(result.recognizedWords.trim());
         }
       },
+      listenOptions: SpeechListenOptions(localeId: 'fr_FR'),
     );
   }
 

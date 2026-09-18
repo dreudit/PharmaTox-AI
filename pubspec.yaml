@@ -43,8 +43,8 @@ dependencies:
   path: ^1.9.0
 
   # --- Audio, Voix & Synthèse Multimodale (Discussion Vocale) ---
-  speech_to_text: ^6.6.1              # Reconnaissance vocale (STT) en français
-  flutter_tts: ^3.8.5                 # Synthèse vocale naturelle (TTS)
+  speech_to_text: ^7.4.0              # Reconnaissance vocale (STT) en français
+  flutter_tts: ^4.2.0                 # Synthèse vocale naturelle (TTS)
   permission_handler: ^11.3.0         # Gestion des permissions Microphone & Stockage
 
   # --- Utilitaires Réseau, Deep Linking & Utilitaires Métier ---
@@ -53,7 +53,7 @@ dependencies:
   file_picker: ^6.2.0                 # Sélection de documents PDF/DOCX/TXT à téléverser
   intl: ^0.19.0                       # Horodatage médical et localisation française
   uuid: ^4.3.3                        # Génération d'identifiants de corrélation de requêtes
-  connectivity_plus: ^5.0.2           # Détection en temps réel du statut réseau
+  connectivity_plus: ^6.0.0           # Détection en temps réel du statut réseau
 
 # -----------------------------------------------------------------------------
 # DÉPENDANCES DE DÉVELOPPEMENT & TESTS

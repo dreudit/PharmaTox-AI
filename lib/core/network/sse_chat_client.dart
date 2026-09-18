@@ -13,6 +13,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'app_config.dart';
 import 'supabase_client.dart';
 
 // -----------------------------------------------------------------------------
@@ -217,7 +218,7 @@ class SseChatClient {
     }
 
     final jwt = session.accessToken;
-    final edgeFunctionUrl = '${_supabase.functionsUrl}/chat';
+    final edgeFunctionUrl = '${AppConfig.supabaseUrl}/functions/v1/chat';
 
     final requestBody = jsonEncode({
       'message': message,
@@ -234,7 +235,7 @@ class SseChatClient {
       HttpHeaders.authorizationHeader: 'Bearer $jwt',
       HttpHeaders.contentTypeHeader: 'application/json',
       HttpHeaders.acceptHeader: 'text/event-stream',
-      'apikey': _supabase.supabaseKey,
+      'apikey': AppConfig.supabaseAnonKey,
     });
     request.body = requestBody;
 

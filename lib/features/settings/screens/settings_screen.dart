@@ -33,7 +33,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _offlineCacheEnabled = true;
 
   Map<String, dynamic> _preferences = {};
-  bool _isLoadingPrefs = true;
 
   String get _userEmail => supabase.auth.currentUser?.email ?? 'Non connecté';
 
@@ -61,8 +60,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       });
     } catch (_) {
       // Garde les valeurs par défaut locales si le profil n'a pas encore été créé.
-    } finally {
-      if (mounted) setState(() => _isLoadingPrefs = false);
     }
   }
 
