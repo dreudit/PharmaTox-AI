@@ -1,40 +1,33 @@
 // =============================================================================
 // DRUGS IA - DISCUSSION VOCALE PLEIN ÉCRAN & ORBE SENSORIEL (Écran 6)
+// Boucle réelle micro -> chat -> synthèse vocale, via voice_session_provider.
 // =============================================================================
 
 import 'dart:math' as math;
-import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
-
-/// États du cycle de discussion vocale.
-enum VoiceSessionState { listening, thinking, speaking, muted }
+import '../providers/voice_session_provider.dart';
 
 /// Écran de discussion vocale plein écran avec orbe sensoriel animé.
-/// L'intégration réelle STT/TTS (speech_to_text / flutter_tts) se branche
-/// sur ces mêmes états via un provider dédié (lib/features/voice/providers).
-class VoiceScreen extends StatefulWidget {
+class VoiceScreen extends ConsumerStatefulWidget {
   final VoidCallback? onCloseRequested;
 
   const VoiceScreen({super.key, this.onCloseRequested});
 
   @override
-  State<VoiceScreen> createState() => _VoiceScreenState();
+  ConsumerState<VoiceScreen> createState() => _VoiceScreenState();
 }
 
-class _VoiceScreenState extends State<VoiceScreen> with TickerProviderStateMixin {
-  VoiceSessionState _currentState = VoiceSessionState.listening;
+class _VoiceScreenState extends ConsumerState<VoiceScreen> with TickerProviderStateMixin {
   bool _isLiveTranscriptExpanded = true;
 
   late AnimationController _pulseController;
   late AnimationController _rotationController;
   late AnimationController _waveController;
-
-  String _liveTranscript = '';
-  String _lastAssistantSnippet = '';
 
   @override
   void initState() {
@@ -42,6 +35,10 @@ class _VoiceScreenState extends State<VoiceScreen> with TickerProviderStateMixin
     _pulseController = AnimationController(vsync: this, duration: const Duration(milliseconds: 2400))..repeat(reverse: true);
     _rotationController = AnimationController(vsync: this, duration: const Duration(seconds: 14))..repeat();
     _waveController = AnimationController(vsync: this, duration: const Duration(milliseconds: 1600))..repeat(reverse: true);
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(voiceSessionProvider.notifier).start();
+    });
   }
 
   @override
@@ -52,34 +49,47 @@ class _VoiceScreenState extends State<VoiceScreen> with TickerProviderStateMixin
     super.dispose();
   }
 
-  void _toggleMute() {
-    HapticFeedback.mediumImpact();
-    setState(() {
-      _currentState = _currentState == VoiceSessionState.muted ? VoiceSessionState.listening : VoiceSessionState.muted;
-    });
+  void _closeScreen() {
+    HapticFeedback.heavyImpact();
+    ref.read(voiceSessionProvider.notifier).stopSession();
+    if (widget.onCloseRequested != null) {
+      widget.onCloseRequested!();
+    } else {
+      Navigator.of(context).pop();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final uiState = ref.watch(voiceSessionProvider);
+
+    ref.listen(voiceSessionProvider, (previous, next) {
+      if (next.errorMessage != null && next.errorMessage != previous?.errorMessage) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(behavior: SnackBarBehavior.floating, content: Text(next.errorMessage!)),
+        );
+      }
+    });
+
     return Scaffold(
       backgroundColor: AppColors.surfaceBackground,
       body: SafeArea(
         child: Column(
           children: [
-            _buildTopVoiceHeader(),
+            _buildTopVoiceHeader(uiState),
             Expanded(
               child: Center(
                 child: Stack(
                   alignment: Alignment.center,
                   children: [
-                    _buildAmbientBacklight(),
+                    _buildAmbientBacklight(uiState.sessionState),
                     AnimatedBuilder(
                       animation: Listenable.merge([_pulseController, _rotationController, _waveController]),
                       builder: (context, child) {
                         return CustomPaint(
                           size: const Size(260, 260),
                           painter: _SensoryOrbPainter(
-                            state: _currentState,
+                            state: uiState.sessionState,
                             pulseProgress: _pulseController.value,
                             rotationAngle: _rotationController.value * 2 * math.pi,
                             waveProgress: _waveController.value,
@@ -87,40 +97,33 @@ class _VoiceScreenState extends State<VoiceScreen> with TickerProviderStateMixin
                         );
                       },
                     ),
-                    Positioned(bottom: 24, child: _buildVoiceStatusBadge()),
+                    Positioned(bottom: 24, child: _buildVoiceStatusBadge(uiState.sessionState)),
                   ],
                 ),
               ),
             ),
-            _buildLiveTranscriptSheet(),
-            _buildBottomControlsBar(),
+            _buildLiveTranscriptSheet(uiState),
+            _buildBottomControlsBar(uiState.sessionState),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildTopVoiceHeader() {
+  Widget _buildTopVoiceHeader(VoiceSessionUiState uiState) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Row(children: [
-            Container(width: 8, height: 8, decoration: BoxDecoration(color: _currentState == VoiceSessionState.muted ? AppColors.errorRed : AppColors.accentTeal, shape: BoxShape.circle)),
+            Container(width: 8, height: 8, decoration: BoxDecoration(color: uiState.sessionState == VoiceSessionState.muted ? AppColors.errorRed : AppColors.accentTeal, shape: BoxShape.circle)),
             const SizedBox(width: 8),
             const Text('Mode vocal', style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.secondaryText, letterSpacing: -0.01)),
           ]),
           IconButton(
             icon: const Icon(Icons.close_rounded, color: AppColors.primaryText, size: 22),
-            onPressed: () {
-              HapticFeedback.lightImpact();
-              if (widget.onCloseRequested != null) {
-                widget.onCloseRequested!();
-              } else {
-                Navigator.of(context).pop();
-              }
-            },
+            onPressed: _closeScreen,
             tooltip: 'Quitter',
           ),
         ],
@@ -128,8 +131,8 @@ class _VoiceScreenState extends State<VoiceScreen> with TickerProviderStateMixin
     );
   }
 
-  Widget _buildAmbientBacklight() {
-    final Color baseColor = switch (_currentState) {
+  Widget _buildAmbientBacklight(VoiceSessionState currentState) {
+    final Color baseColor = switch (currentState) {
       VoiceSessionState.listening => AppColors.accentTeal.withOpacity(0.12),
       VoiceSessionState.thinking => AppColors.accentBlue.withOpacity(0.14),
       VoiceSessionState.speaking => const Color(0xFF6366F1).withOpacity(0.12),
@@ -144,8 +147,8 @@ class _VoiceScreenState extends State<VoiceScreen> with TickerProviderStateMixin
     );
   }
 
-  Widget _buildVoiceStatusBadge() {
-    final (String label, IconData icon, Color iconColor) = switch (_currentState) {
+  Widget _buildVoiceStatusBadge(VoiceSessionState currentState) {
+    final (String label, IconData icon, Color iconColor) = switch (currentState) {
       VoiceSessionState.listening => ('Écoute active...', Icons.mic_rounded, AppColors.accentTeal),
       VoiceSessionState.thinking => ('Recherche et raisonnement...', Icons.bubble_chart_rounded, AppColors.accentBlue),
       VoiceSessionState.speaking => ('Réponse en cours (touchez pour interrompre)', Icons.volume_up_rounded, const Color(0xFF4F46E5)),
@@ -167,8 +170,8 @@ class _VoiceScreenState extends State<VoiceScreen> with TickerProviderStateMixin
     );
   }
 
-  Widget _buildLiveTranscriptSheet() {
-    final hasContent = _liveTranscript.isNotEmpty || _lastAssistantSnippet.isNotEmpty;
+  Widget _buildLiveTranscriptSheet(VoiceSessionUiState uiState) {
+    final hasContent = uiState.liveTranscript.isNotEmpty || uiState.assistantText.isNotEmpty;
 
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
@@ -200,11 +203,11 @@ class _VoiceScreenState extends State<VoiceScreen> with TickerProviderStateMixin
             if (!hasContent)
               const Text('Parlez pour commencer...', style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 12.5, color: AppColors.tertiaryText, fontStyle: FontStyle.italic))
             else ...[
-              if (_liveTranscript.isNotEmpty)
-                Text('« $_liveTranscript »', style: const TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 12.5, fontWeight: FontWeight.w500, color: AppColors.secondaryText, fontStyle: FontStyle.italic), maxLines: 2, overflow: TextOverflow.ellipsis),
-              if (_lastAssistantSnippet.isNotEmpty) ...[
+              if (uiState.liveTranscript.isNotEmpty)
+                Text('« ${uiState.liveTranscript} »', style: const TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 12.5, fontWeight: FontWeight.w500, color: AppColors.secondaryText, fontStyle: FontStyle.italic), maxLines: 2, overflow: TextOverflow.ellipsis),
+              if (uiState.assistantText.isNotEmpty) ...[
                 const SizedBox(height: 6),
-                Text(_lastAssistantSnippet, style: const TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 13.5, fontWeight: FontWeight.w600, color: AppColors.primaryText, height: 1.4), maxLines: 3, overflow: TextOverflow.ellipsis),
+                Text(uiState.assistantText, style: const TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 13.5, fontWeight: FontWeight.w600, color: AppColors.primaryText, height: 1.4), maxLines: 3, overflow: TextOverflow.ellipsis),
               ],
             ],
           ],
@@ -213,27 +216,30 @@ class _VoiceScreenState extends State<VoiceScreen> with TickerProviderStateMixin
     );
   }
 
-  Widget _buildBottomControlsBar() {
+  Widget _buildBottomControlsBar(VoiceSessionState currentState) {
     return Container(
       padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
           _buildActionButton(
-            icon: _currentState == VoiceSessionState.muted ? Icons.mic_off_rounded : Icons.mic_rounded,
-            label: _currentState == VoiceSessionState.muted ? 'Réactiver' : 'Muet',
-            isActive: _currentState == VoiceSessionState.muted,
+            icon: currentState == VoiceSessionState.muted ? Icons.mic_off_rounded : Icons.mic_rounded,
+            label: currentState == VoiceSessionState.muted ? 'Réactiver' : 'Muet',
+            isActive: currentState == VoiceSessionState.muted,
             activeColor: AppColors.errorRed,
-            onTap: _toggleMute,
+            onTap: () {
+              HapticFeedback.mediumImpact();
+              ref.read(voiceSessionProvider.notifier).toggleMute();
+            },
           ),
           _buildActionButton(
             icon: Icons.pause_circle_outline_rounded,
             label: 'Interrompre',
-            isActive: _currentState == VoiceSessionState.speaking,
+            isActive: currentState == VoiceSessionState.speaking,
             activeColor: AppColors.accentBlue,
             onTap: () {
               HapticFeedback.mediumImpact();
-              setState(() => _currentState = VoiceSessionState.listening);
+              ref.read(voiceSessionProvider.notifier).interrupt();
             },
           ),
           _buildActionButton(
@@ -241,14 +247,7 @@ class _VoiceScreenState extends State<VoiceScreen> with TickerProviderStateMixin
             label: 'Terminer',
             isActive: true,
             activeColor: AppColors.primaryText,
-            onTap: () {
-              HapticFeedback.heavyImpact();
-              if (widget.onCloseRequested != null) {
-                widget.onCloseRequested!();
-              } else {
-                Navigator.of(context).pop();
-              }
-            },
+            onTap: _closeScreen,
           ),
         ],
       ),
