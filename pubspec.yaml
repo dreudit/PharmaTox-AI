@@ -11,8 +11,8 @@ publish_to: 'none' # Application privée hospitalière / usage personnel
 version: 1.0.0+1
 
 environment:
-  sdk: '>=3.2.0 <4.0.0'
-  flutter: ">=3.16.0"
+  sdk: '>=3.3.0 <4.0.0'
+  flutter: ">=3.19.0"
 
 # -----------------------------------------------------------------------------
 # DÉPENDANCES DE PRODUCTION
@@ -29,7 +29,9 @@ dependencies:
   shimmer: ^3.0.0                     # Animations de chargement soyeuses (placeholders)
 
   # --- Backend BaaS & Authentification (Supabase) ---
-  supabase_flutter: ^2.3.4            # Auth, Postgres, Storage, Realtime, Edge Functions
+  # >=2.13.0 requis pour les clés "publishable" (sb_publishable_...), qui
+  # remplacent l'ancienne clé anonyme JWT.
+  supabase_flutter: ^2.13.0           # Auth, Postgres, Storage, Realtime, Edge Functions
 
   # --- State Management & Injection de Dépendances ---
   flutter_riverpod: ^2.5.1            # Architecture réactive recommandée

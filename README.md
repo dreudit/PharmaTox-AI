@@ -16,53 +16,78 @@ et les spécifications UI/UX dans [`docs/specifications-ui-ux.md`](docs/specific
 - ✅ Client SSE Riverpod pour le streaming du chat (`lib/core/network/sse_chat_client.dart`).
 - ✅ Schéma SQL Supabase complet avec RLS, pgvector/HNSW, bucket Storage privé
   (`supabase/migrations/20250101000000_init_schema.sql`).
-- ✅ Squelettes des Edge Functions `chat`, `search-library`, `ingest-document`
-  (`supabase/functions/**`).
-- ⏳ À compléter une fois le projet Supabase branché : extraction réelle de texte
-  PDF/DOCX dans `ingest-document`, calcul d'embeddings, recherche web sourcée
-  (`web-search`), voix (STT/TTS), connecteurs MCP (`mcp-proxy`), quotas (`usage-guard`).
+- ✅ Squelettes des Edge Functions `chat`, `search-library`, `ingest-document`,
+  `stt` (Groq Whisper) (`supabase/functions/**`).
+- ✅ Projet Supabase branché par défaut (`pqwdmxuppitudhjgnxnv`), migration et
+  secrets à appliquer manuellement (voir plus bas — bloqué par le réseau de
+  cette sandbox, pas par le code).
+- ⏳ À compléter : extraction réelle de texte PDF/DOCX dans `ingest-document`,
+  calcul d'embeddings, recherche web sourcée (`web-search`), synthèse vocale
+  (TTS) et branchement de `VoiceScreen`/`stt` sur de l'audio réel, connecteurs
+  MCP (`mcp-proxy`), quotas (`usage-guard`).
 
 ## Démarrer le projet Flutter
 
-Les dossiers de plateforme (`android/`, `ios/`, `web/`...) ne sont pas versionnés :
-générez-les localement, une seule fois, à la racine du dépôt :
+Le projet Supabase est déjà branché par défaut (`lib/core/network/app_config.dart`) :
+URL et clé publiable (`sb_publishable_...`, sans danger côté client — la
+sécurité vient des policies RLS, pas du secret de cette clé). Les dossiers de
+plateforme (`android/`, `ios/`, `web/`...) ne sont pas versionnés : générez-les
+localement, une seule fois, à la racine du dépôt :
 
 ```bash
 flutter create . --org com.drugsia.app --project-name drugs_ia_app
 flutter pub get
+flutter run
 ```
 
-Puis lancez l'app en fournissant l'URL et la clé anonyme de votre projet Supabase
-(l'app affiche un écran de configuration requise si elles sont absentes) :
+Pour pointer vers un autre projet Supabase (dev personnel) :
 
 ```bash
 flutter run \
   --dart-define=SUPABASE_URL=https://xxxxxxxx.supabase.co \
-  --dart-define=SUPABASE_ANON_KEY=eyJhbGciOi...
+  --dart-define=SUPABASE_ANON_KEY=sb_publishable_...
 ```
 
 ## Configurer le backend Supabase
 
-1. Créez un projet Supabase (région Europe recommandée pour la conformité RGPD).
-2. Appliquez la migration :
+> ⚠️ Cet environnement Claude Code n'a pas accès réseau à `*.supabase.co`
+> (politique d'egress de la sandbox) : le CLI Supabase y est installé mais ne
+> peut pas atteindre l'API de gestion. Les étapes ci-dessous doivent donc être
+> exécutées **depuis votre propre machine** (ou tout environnement sans cette
+> restriction), avec le jeton d'accès personnel Supabase que vous avez fourni.
+
+1. Lier le projet (déjà créé : `pqwdmxuppitudhjgnxnv`) :
    ```bash
-   supabase link --project-ref <votre-ref>
+   supabase login   # ou : export SUPABASE_ACCESS_TOKEN=sbp_...
+   supabase link --project-ref pqwdmxuppitudhjgnxnv
+   ```
+2. Appliquer la migration :
+   ```bash
    supabase db push
    ```
    (ou copiez le contenu de `supabase/migrations/20250101000000_init_schema.sql`
-   dans l'éditeur SQL du dashboard Supabase).
-3. Renseignez les secrets des Edge Functions :
+   dans l'éditeur SQL du dashboard Supabase — Project > SQL Editor — si vous
+   préférez ne pas installer le CLI).
+3. Renseigner les secrets des Edge Functions (Dashboard > Edge Functions >
+   Secrets, ou en CLI) :
    ```bash
    supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
+   supabase secrets set GROQ_API_KEY=gsk_...   # utilisé par la fonction `stt`
    ```
-4. Déployez les fonctions :
+4. Déployer les fonctions :
    ```bash
    supabase functions deploy chat
    supabase functions deploy search-library
    supabase functions deploy ingest-document
+   supabase functions deploy stt
    ```
-5. Activez les providers d'authentification souhaités (Email, Google) dans
+5. Activer les providers d'authentification souhaités (Email, Google) dans
    Auth > Providers du dashboard.
+
+Aucune de ces clés (`ANTHROPIC_API_KEY`, `GROQ_API_KEY`, le jeton d'accès
+`sbp_...`) ne doit jamais être commitée dans ce dépôt : elles vivent
+uniquement dans les secrets Supabase, jamais dans le code Flutter ni dans
+`supabase/config.toml`.
 
 ## Architecture
 
