@@ -1,11 +1,15 @@
 // =============================================================================
 // DRUGS IA - EDGE FUNCTION `search-library`
-// Recherche hybride (vectorielle + plein texte) dans les documents de
-// l'utilisateur, filtrée par dossier ou document précis. Appelle la
-// fonction SQL `match_document_chunks` (voir migration init_schema.sql).
+// Recherche vectorielle dans les documents de l'utilisateur, filtrée par
+// dossier ou document précis. Appelle la fonction SQL `match_document_chunks`
+// (voir migrations) avec un embedding calculé via Groq (nomic-embed-text-v1_5).
+//
+// Secret requis : GROQ_API_KEY
 // =============================================================================
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+
+import { embedText } from '../_shared/groq.ts';
 
 interface SearchRequestBody {
   query: string;
@@ -29,10 +33,17 @@ Deno.serve(async (req: Request) => {
 
   const { query, documentId, folderId, matchCount = 8 } = (await req.json()) as SearchRequestBody;
 
-  // TODO : calculer l'embedding de `query` (ex. API d'embeddings Anthropic/OpenAI)
-  // avant d'appeler match_document_chunks. Le vecteur ci-dessous est un
-  // placeholder de dimension 1536 rempli de zéros.
-  const queryEmbedding = new Array(1536).fill(0);
+  const groqKey = Deno.env.get('GROQ_API_KEY');
+  if (!groqKey) {
+    return new Response(JSON.stringify({ error: 'GROQ_API_KEY manquante.' }), { status: 500 });
+  }
+
+  let queryEmbedding: number[];
+  try {
+    queryEmbedding = await embedText(query, groqKey);
+  } catch (err) {
+    return new Response(JSON.stringify({ error: String(err) }), { status: 502 });
+  }
 
   const { data, error } = await supabase.rpc('match_document_chunks', {
     query_embedding: queryEmbedding,

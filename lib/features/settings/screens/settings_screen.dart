@@ -32,7 +32,58 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   bool _offlineCacheEnabled = true;
 
+  Map<String, dynamic> _preferences = {};
+  bool _isLoadingPrefs = true;
+
   String get _userEmail => supabase.auth.currentUser?.email ?? 'Non connecté';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPreferences();
+  }
+
+  Future<void> _loadPreferences() async {
+    final userId = supabase.auth.currentUser?.id;
+    if (userId == null) return;
+    try {
+      final row = await supabase.from('profiles').select('preferences').eq('id', userId).single();
+      final prefs = (row['preferences'] as Map<String, dynamic>?) ?? {};
+      final sources = (prefs['allowed_web_sources'] as Map<String, dynamic>?) ?? {};
+      if (!mounted) return;
+      setState(() {
+        _preferences = prefs;
+        _enablePubMed = sources['pubmed'] as bool? ?? true;
+        _enableANSM = sources['ansm'] as bool? ?? true;
+        _enableHAS = sources['has'] as bool? ?? true;
+        _enableOpenFDA = sources['openfda'] as bool? ?? true;
+        _enableDailyMed = sources['dailymed'] as bool? ?? false;
+      });
+    } catch (_) {
+      // Garde les valeurs par défaut locales si le profil n'a pas encore été créé.
+    } finally {
+      if (mounted) setState(() => _isLoadingPrefs = false);
+    }
+  }
+
+  /// Persiste la liste blanche des sources web dans profiles.preferences,
+  /// utilisée par l'Edge Function `chat` pour restreindre la recherche web.
+  Future<void> _persistWebSources() async {
+    final userId = supabase.auth.currentUser?.id;
+    if (userId == null) return;
+    final updated = {
+      ..._preferences,
+      'allowed_web_sources': {
+        'pubmed': _enablePubMed,
+        'ansm': _enableANSM,
+        'has': _enableHAS,
+        'openfda': _enableOpenFDA,
+        'dailymed': _enableDailyMed,
+      },
+    };
+    _preferences = updated;
+    await supabase.from('profiles').update({'preferences': updated}).eq('id', userId);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -84,11 +135,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 20),
           _buildSectionHeader('Sources web autorisées'),
           _buildSettingsGroup([
-            _buildSwitchTile(icon: Icons.public_rounded, title: 'PubMed / PMC', subtitle: 'Articles validés par les pairs', value: _enablePubMed, onChanged: (v) => setState(() => _enablePubMed = v)),
-            _buildSwitchTile(icon: Icons.verified_outlined, title: 'ANSM', subtitle: 'Monographies et posologies officielles françaises', value: _enableANSM, onChanged: (v) => setState(() => _enableANSM = v)),
-            _buildSwitchTile(icon: Icons.library_books_outlined, title: 'HAS', subtitle: 'Recommandations de bonne pratique', value: _enableHAS, onChanged: (v) => setState(() => _enableHAS = v)),
-            _buildSwitchTile(icon: Icons.medical_services_outlined, title: 'OpenFDA / DailyMed', subtitle: 'Alertes de pharmacovigilance internationales', value: _enableOpenFDA, onChanged: (v) => setState(() => _enableOpenFDA = v)),
-            _buildSwitchTile(icon: Icons.medication_outlined, title: 'DailyMed', subtitle: 'Notices officielles US', value: _enableDailyMed, onChanged: (v) => setState(() => _enableDailyMed = v)),
+            _buildSwitchTile(icon: Icons.public_rounded, title: 'PubMed / PMC', subtitle: 'Articles validés par les pairs', value: _enablePubMed, onChanged: (v) { setState(() => _enablePubMed = v); _persistWebSources(); }),
+            _buildSwitchTile(icon: Icons.verified_outlined, title: 'ANSM', subtitle: 'Monographies et posologies officielles françaises', value: _enableANSM, onChanged: (v) { setState(() => _enableANSM = v); _persistWebSources(); }),
+            _buildSwitchTile(icon: Icons.library_books_outlined, title: 'HAS', subtitle: 'Recommandations de bonne pratique', value: _enableHAS, onChanged: (v) { setState(() => _enableHAS = v); _persistWebSources(); }),
+            _buildSwitchTile(icon: Icons.medical_services_outlined, title: 'OpenFDA / DailyMed', subtitle: 'Alertes de pharmacovigilance internationales', value: _enableOpenFDA, onChanged: (v) { setState(() => _enableOpenFDA = v); _persistWebSources(); }),
+            _buildSwitchTile(icon: Icons.medication_outlined, title: 'DailyMed', subtitle: 'Notices officielles US', value: _enableDailyMed, onChanged: (v) { setState(() => _enableDailyMed = v); _persistWebSources(); }),
           ]),
           const SizedBox(height: 20),
           _buildSectionHeader('Données & sécurité'),

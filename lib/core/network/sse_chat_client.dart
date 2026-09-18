@@ -206,6 +206,7 @@ class SseChatClient {
     required String message,
     String? conversationId,
     String sourcesMode = 'all', // 'all', 'library_only', 'web_only'
+    String searchMode = 'deep', // 'quick' (1 recherche) ou 'deep' (plusieurs, façon Perplexity)
     String? documentId,
     String? folderId,
   }) async* {
@@ -222,6 +223,7 @@ class SseChatClient {
       'message': message,
       if (conversationId != null) 'conversationId': conversationId,
       'sourcesMode': sourcesMode,
+      'searchMode': searchMode,
       if (documentId != null) 'documentId': documentId,
       if (folderId != null) 'folderId': folderId,
       'clientTimestamp': DateTime.now().toIso8601String(),
@@ -355,6 +357,7 @@ class ChatStreamNotifier extends StateNotifier<ChatStreamingState> {
     required String query,
     String? conversationId,
     String sourcesMode = 'all',
+    String searchMode = 'deep',
     String? documentId,
     VoidCallback? onTokenReceived,
     VoidCallback? onCompleted,
@@ -375,6 +378,7 @@ class ChatStreamNotifier extends StateNotifier<ChatStreamingState> {
           message: query,
           conversationId: conversationId,
           sourcesMode: sourcesMode,
+          searchMode: searchMode,
           documentId: documentId,
         )
         .listen(

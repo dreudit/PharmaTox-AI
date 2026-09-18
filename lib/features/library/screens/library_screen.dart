@@ -2,13 +2,31 @@
 // DRUGS IA - BIBLIOTHÈQUE DE DOCUMENTS (Écran 7 du cahier des charges — F1)
 // =============================================================================
 
+import 'dart:async';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:uuid/uuid.dart';
 
+import '../../../core/network/supabase_client.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../shared_widgets/floating_capsule_nav.dart';
 
 enum IngestionStatus { ready, indexing, pending, error }
+
+IngestionStatus _statusFromDb(String value) {
+  switch (value) {
+    case 'ready':
+      return IngestionStatus.ready;
+    case 'indexing':
+      return IngestionStatus.indexing;
+    case 'error':
+      return IngestionStatus.error;
+    default:
+      return IngestionStatus.pending;
+  }
+}
 
 class LibraryDocumentModel {
   final String id;
@@ -34,6 +52,20 @@ class LibraryDocumentModel {
     required this.status,
     this.indexingProgress,
   });
+
+  factory LibraryDocumentModel.fromRow(Map<String, dynamic> row) {
+    return LibraryDocumentModel(
+      id: row['id'] as String,
+      title: row['title'] as String,
+      category: row['category'] as String? ?? 'Autre',
+      fileFormat: row['file_format'] as String? ?? 'PDF',
+      pageCount: (row['page_count'] as int?) ?? 0,
+      sizeInMb: ((row['size_bytes'] as int?) ?? 0) / (1024 * 1024),
+      chunkCount: (row['chunk_count'] as int?) ?? 0,
+      updatedAt: DateTime.tryParse(row['updated_at'] as String? ?? '') ?? DateTime.now(),
+      status: _statusFromDb(row['status'] as String? ?? 'pending'),
+    );
+  }
 }
 
 /// Écran Bibliothèque : liste des documents personnels de l'utilisateur,
@@ -49,6 +81,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _selectedCategory = 'Tous';
   int _currentNavIndex = 1;
+  bool _isLoading = true;
 
   final List<String> _categories = const [
     'Tous',
@@ -58,12 +91,43 @@ class _LibraryScreenState extends State<LibraryScreen> {
     'Autre',
   ];
 
-  // TODO: remplacer par une requête Supabase sur `documents`
-  // (SELECT ... WHERE user_id = auth.uid() ORDER BY created_at DESC).
-  final List<LibraryDocumentModel> _documents = const [];
+  List<LibraryDocumentModel> _documents = [];
 
   double get _usedMb => _documents.fold(0.0, (sum, d) => sum + d.sizeInMb);
   static const double _quotaMb = 50.0;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDocuments();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadDocuments() async {
+    setState(() => _isLoading = true);
+    try {
+      final userId = supabase.auth.currentUser?.id;
+      if (userId == null) return;
+      final rows = await supabase
+          .from('documents')
+          .select()
+          .eq('user_id', userId)
+          .order('created_at', ascending: false);
+      if (!mounted) return;
+      setState(() {
+        _documents = (rows as List).map((r) => LibraryDocumentModel.fromRow(r as Map<String, dynamic>)).toList();
+      });
+    } catch (_) {
+      // Liste vide en cas d'échec réseau ; l'utilisateur peut tirer pour rafraîchir.
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
 
   List<LibraryDocumentModel> get _filteredDocuments {
     final query = _searchController.text.trim().toLowerCase();
@@ -82,7 +146,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (context) => const _DocumentUploadBottomSheet(),
+      builder: (context) => _DocumentUploadBottomSheet(onUploaded: _loadDocuments),
     );
   }
 
@@ -91,59 +155,64 @@ class _LibraryScreenState extends State<LibraryScreen> {
     return Scaffold(
       backgroundColor: AppColors.surfaceBackground,
       appBar: _buildAppBar(),
-      body: Stack(
-        children: [
-          CustomScrollView(
-            slivers: [
-              SliverToBoxAdapter(child: _buildStorageQuotaCard()),
-              SliverToBoxAdapter(child: _buildSearchBar()),
-              SliverToBoxAdapter(child: _buildCategoryFilters()),
-              if (_documents.isEmpty)
-                SliverFillRemaining(hasScrollBody: false, child: _buildEmptyLibrary())
-              else ...[
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                    child: Text(
-                      'Documents indexés (${_filteredDocuments.length})',
-                      style: const TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.primaryText),
+      body: RefreshIndicator(
+        onRefresh: _loadDocuments,
+        child: Stack(
+          children: [
+            CustomScrollView(
+              slivers: [
+                SliverToBoxAdapter(child: _buildStorageQuotaCard()),
+                SliverToBoxAdapter(child: _buildSearchBar()),
+                SliverToBoxAdapter(child: _buildCategoryFilters()),
+                if (_isLoading)
+                  const SliverFillRemaining(hasScrollBody: false, child: Center(child: CircularProgressIndicator()))
+                else if (_documents.isEmpty)
+                  SliverFillRemaining(hasScrollBody: false, child: _buildEmptyLibrary())
+                else ...[
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                      child: Text(
+                        'Documents indexés (${_filteredDocuments.length})',
+                        style: const TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.primaryText),
+                      ),
                     ),
                   ),
-                ),
-                SliverPadding(
-                  padding: const EdgeInsets.only(left: 16, right: 16, bottom: 110),
-                  sliver: SliverList(
-                    delegate: SliverChildBuilderDelegate(
-                      (context, index) => _buildDocumentCard(_filteredDocuments[index]),
-                      childCount: _filteredDocuments.length,
+                  SliverPadding(
+                    padding: const EdgeInsets.only(left: 16, right: 16, bottom: 110),
+                    sliver: SliverList(
+                      delegate: SliverChildBuilderDelegate(
+                        (context, index) => _buildDocumentCard(_filteredDocuments[index]),
+                        childCount: _filteredDocuments.length,
+                      ),
                     ),
                   ),
-                ),
+                ],
               ],
-            ],
-          ),
-          Positioned(
-            right: 20,
-            bottom: 86,
-            child: FloatingActionButton.extended(
-              onPressed: _showUploadModal,
-              backgroundColor: AppColors.primaryText,
-              foregroundColor: Colors.white,
-              elevation: 4,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9999)),
-              icon: const Icon(Icons.add_rounded, size: 20),
-              label: const Text('Ajouter un document', style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 13, fontWeight: FontWeight.w600)),
             ),
-          ),
-          FloatingCapsuleNav(
-            currentIndex: _currentNavIndex,
-            onIndexChanged: (index) {
-              setState(() => _currentNavIndex = index);
-              if (index == 0) Navigator.of(context).pushNamedAndRemoveUntil('/chat', (r) => false);
-              if (index == 2) Navigator.of(context).pushNamed('/settings');
-            },
-          ),
-        ],
+            Positioned(
+              right: 20,
+              bottom: 86,
+              child: FloatingActionButton.extended(
+                onPressed: _showUploadModal,
+                backgroundColor: AppColors.primaryText,
+                foregroundColor: Colors.white,
+                elevation: 4,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9999)),
+                icon: const Icon(Icons.add_rounded, size: 20),
+                label: const Text('Ajouter un document', style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 13, fontWeight: FontWeight.w600)),
+              ),
+            ),
+            FloatingCapsuleNav(
+              currentIndex: _currentNavIndex,
+              onIndexChanged: (index) {
+                setState(() => _currentNavIndex = index);
+                if (index == 0) Navigator.of(context).pushNamedAndRemoveUntil('/chat', (r) => false);
+                if (index == 2) Navigator.of(context).pushNamed('/settings');
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -353,7 +422,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                       children: [
                         Text(doc.title, style: const TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 13.5, fontWeight: FontWeight.w600, color: AppColors.primaryText, height: 1.35), maxLines: 2, overflow: TextOverflow.ellipsis),
                         const SizedBox(height: 4),
-                        Text('${doc.category} • ${doc.pageCount} pages • ${doc.sizeInMb} Mo', style: const TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 11, color: AppColors.tertiaryText)),
+                        Text('${doc.category} • ${doc.pageCount} pages • ${doc.sizeInMb.toStringAsFixed(1)} Mo', style: const TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 11, color: AppColors.tertiaryText)),
                       ],
                     ),
                   ),
@@ -382,7 +451,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
         return Row(children: [
           const SizedBox(width: 10, height: 10, child: CircularProgressIndicator(strokeWidth: 1.8, valueColor: AlwaysStoppedAnimation<Color>(AppColors.warningAmber))),
           const SizedBox(width: 6),
-          Text('Indexation (${((doc.indexingProgress ?? 0.5) * 100).toInt()}%)', style: const TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.warningAmber)),
+          const Text('Indexation en cours...', style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.warningAmber)),
         ]);
       case IngestionStatus.pending:
         return const Row(children: [
@@ -401,8 +470,71 @@ class _LibraryScreenState extends State<LibraryScreen> {
 }
 
 /// Bottom Sheet pour l'import d'un nouveau document PDF/DOCX/TXT.
-class _DocumentUploadBottomSheet extends StatelessWidget {
-  const _DocumentUploadBottomSheet();
+/// Téléverse le fichier dans Storage, crée la ligne `documents`, puis
+/// déclenche l'Edge Function `ingest-document` (extraction + embeddings).
+class _DocumentUploadBottomSheet extends StatefulWidget {
+  final VoidCallback onUploaded;
+
+  const _DocumentUploadBottomSheet({required this.onUploaded});
+
+  @override
+  State<_DocumentUploadBottomSheet> createState() => _DocumentUploadBottomSheetState();
+}
+
+class _DocumentUploadBottomSheetState extends State<_DocumentUploadBottomSheet> {
+  bool _isUploading = false;
+  String? _errorMessage;
+
+  Future<void> _pickAndUpload() async {
+    setState(() {
+      _errorMessage = null;
+    });
+
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['pdf', 'docx', 'txt'],
+      withData: true,
+    );
+    final picked = result?.files.single;
+    if (picked == null || picked.bytes == null) return;
+
+    final userId = supabase.auth.currentUser?.id;
+    if (userId == null) return;
+
+    setState(() => _isUploading = true);
+
+    try {
+      final extension = (picked.extension ?? 'txt').toUpperCase();
+      final bytes = picked.bytes!;
+      final docId = const Uuid().v4();
+      final storagePath = '$userId/$docId-${picked.name}';
+
+      await supabase.storage.from('documents').uploadBinary(storagePath, bytes);
+
+      await supabase.from('documents').insert({
+        'id': docId,
+        'user_id': userId,
+        'title': picked.name,
+        'category': 'Autre',
+        'storage_path': storagePath,
+        'file_format': extension,
+        'size_bytes': picked.size,
+        'status': 'pending',
+      });
+
+      // Déclenche l'extraction/indexation en tâche de fond (n'attend pas la fin).
+      unawaited(supabase.functions.invoke('ingest-document', body: {'documentId': docId}));
+
+      if (mounted) {
+        Navigator.pop(context);
+        widget.onUploaded();
+      }
+    } catch (err) {
+      if (mounted) setState(() => _errorMessage = "Échec de l'envoi : $err");
+    } finally {
+      if (mounted) setState(() => _isUploading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -422,18 +554,32 @@ class _DocumentUploadBottomSheet extends StatelessWidget {
             style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 12, color: AppColors.secondaryText, height: 1.4),
           ),
           const SizedBox(height: 16),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 24),
-            decoration: BoxDecoration(color: AppColors.surfaceContainerLow, borderRadius: BorderRadius.circular(16), border: Border.all(color: AppColors.surfaceContainerHigh)),
-            child: Column(children: const [
-              Icon(Icons.cloud_upload_outlined, size: 36, color: AppColors.accentTeal),
-              SizedBox(height: 8),
-              Text('Sélectionner un PDF, DOCX ou TXT', style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.primaryText)),
-              SizedBox(height: 4),
-              Text('Taille max : 50 Mo par fichier', style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 11, color: AppColors.tertiaryText)),
-            ]),
+          InkWell(
+            onTap: _isUploading ? null : _pickAndUpload,
+            borderRadius: BorderRadius.circular(16),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 24),
+              decoration: BoxDecoration(color: AppColors.surfaceContainerLow, borderRadius: BorderRadius.circular(16), border: Border.all(color: AppColors.surfaceContainerHigh)),
+              child: Column(children: [
+                if (_isUploading)
+                  const SizedBox(width: 28, height: 28, child: CircularProgressIndicator(strokeWidth: 2.5))
+                else
+                  const Icon(Icons.cloud_upload_outlined, size: 36, color: AppColors.accentTeal),
+                const SizedBox(height: 8),
+                Text(
+                  _isUploading ? 'Envoi en cours...' : 'Sélectionner un PDF, DOCX ou TXT',
+                  style: const TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.primaryText),
+                ),
+                const SizedBox(height: 4),
+                const Text('Taille max : 50 Mo par fichier', style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 11, color: AppColors.tertiaryText)),
+              ]),
+            ),
           ),
+          if (_errorMessage != null) ...[
+            const SizedBox(height: 10),
+            Text(_errorMessage!, style: const TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 11.5, color: AppColors.errorRed)),
+          ],
           const SizedBox(height: 20),
         ],
       ),

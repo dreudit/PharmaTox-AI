@@ -1,7 +1,10 @@
 // =============================================================================
 // DRUGS IA - EDGE FUNCTION `chat`
-// Reçoit un message, récupère le contexte RAG, appelle Groq (Llama 3.3 70B)
-// en streaming, streame la réponse en SSE et enregistre message + citations.
+// Reçoit un message, récupère le contexte RAG (pgvector), interroge Groq
+// (Llama 3.3 70B pour la bibliothèque seule, ou Groq Compound quand la
+// recherche web est activée — celui-ci exécute sa propre recherche web et
+// renvoie ses sources), streame la réponse en SSE et enregistre message +
+// citations.
 //
 // Contrat SSE consommé par lib/core/network/sse_chat_client.dart :
 //   event: init   data: {conversationId, messageId, citations, sourcesCount}
@@ -9,13 +12,39 @@
 //   event: done   data: {conversationId, messageId, totalLength, latencyMs, citations}
 //   event: error  data: {error}
 //
-// Secret requis (supabase secrets set ...) :
-//   GROQ_API_KEY
+// Secret requis : GROQ_API_KEY
 // =============================================================================
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
-const GROQ_MODEL = 'llama-3.3-70b-versatile';
+import { embedText } from '../_shared/groq.ts';
+
+const LIBRARY_MODEL = 'llama-3.3-70b-versatile';
+// groq/compound : recherche web intégrée (Tavily), plusieurs recherches par requête si
+// nécessaire — utilisé en mode "Approfondi" pour une synthèse multi-sources façon Perplexity.
+// groq/compound-mini : une seule recherche, ~3x plus rapide — mode "Rapide".
+const WEB_MODEL_DEEP = 'groq/compound';
+const WEB_MODEL_QUICK = 'groq/compound-mini';
+
+// Liste blanche des domaines médicaux/réglementaires de confiance, activable
+// individuellement dans Réglages > Sources web (profiles.preferences.allowed_web_sources).
+const SOURCE_DOMAINS: Record<string, string[]> = {
+  pubmed: ['pubmed.ncbi.nlm.nih.gov', 'ncbi.nlm.nih.gov'],
+  ansm: ['ansm.sante.fr'],
+  has: ['has-sante.fr'],
+  openfda: ['fda.gov', 'open.fda.gov'],
+  dailymed: ['dailymed.nlm.nih.gov'],
+};
+// Toujours inclus, indépendamment des réglages utilisateur (sources internationales
+// de référence non désactivables) : EMA, OMS, PubChem, CDC/ATSDR, Cochrane.
+const ALWAYS_INCLUDED_DOMAINS = [
+  'ema.europa.eu',
+  'who.int',
+  'pubchem.ncbi.nlm.nih.gov',
+  'cdc.gov',
+  'atsdr.cdc.gov',
+  'cochranelibrary.com',
+];
 
 const SYSTEM_PROMPT = `Tu es Drugs IA, un assistant expert en pharmacologie et toxicologie.
 
@@ -28,18 +57,42 @@ Règles obligatoires :
 6. Ne jamais poser de diagnostic ni prescrire : ceci est un outil d'aide à l'information, pas un dispositif médical.
 7. Refuser toute aide à un usage malveillant (empoisonner, synthétiser des toxiques, contourner des contrôles).
 8. Refuser poliment les sujets hors pharmacologie/toxicologie et rediriger.
-9. Répondre dans la langue de l'utilisateur.`;
+9. Répondre dans la langue de l'utilisateur.
+10. Quand des extraits de bibliothèque te sont fournis ci-dessous, cite-les avec leur numéro [n].`;
+
+const WEB_SEARCH_INSTRUCTIONS = `
+
+Recherche web : croise plusieurs sources indépendantes avant de conclure sur un point clinique important (dose, interaction, alerte de pharmacovigilance). Préfère toujours la source la plus récente et la plus autoritative (agence réglementaire > méta-analyse/Cochrane > étude primaire). Indique la date de publication de chaque source quand elle est disponible, et signale explicitement si les sources se contredisent.`;
 
 interface ChatRequestBody {
   message: string;
   conversationId?: string;
   sourcesMode?: 'all' | 'library_only' | 'web_only';
+  searchMode?: 'quick' | 'deep';
   documentId?: string;
   folderId?: string;
 }
 
+interface Citation {
+  citationNumber: number;
+  type: 'rag' | 'web';
+  title: string;
+  subtitleOrAuthor?: string;
+  documentName?: string;
+  pageNumber?: number;
+  sectionTitle?: string;
+  url?: string;
+  publicationDate?: string;
+  relevanceScore?: number;
+  excerptText: string;
+}
+
 function sseEvent(event: string, data: unknown): string {
   return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+}
+
+function truncate(text: string, max = 400): string {
+  return text.length > max ? `${text.slice(0, max)}…` : text;
 }
 
 Deno.serve(async (req: Request) => {
@@ -59,14 +112,20 @@ Deno.serve(async (req: Request) => {
   const userId = userData.user.id;
 
   const body = (await req.json()) as ChatRequestBody;
-  const { message, sourcesMode = 'all', documentId, folderId } = body;
+  const { message, sourcesMode = 'all', searchMode = 'deep', documentId, folderId } = body;
   let conversationId = body.conversationId;
+
+  const wantsLibrary = sourcesMode === 'all' || sourcesMode === 'library_only';
+  const wantsWeb = sourcesMode === 'all' || sourcesMode === 'web_only';
 
   const stream = new ReadableStream({
     async start(controller) {
       const push = (event: string, data: unknown) => controller.enqueue(new TextEncoder().encode(sseEvent(event, data)));
 
       try {
+        const groqKey = Deno.env.get('GROQ_API_KEY');
+        if (!groqKey) throw new Error('GROQ_API_KEY manquante.');
+
         // 1. Créer la conversation si nécessaire.
         if (!conversationId) {
           const { data: conv, error } = await supabase
@@ -86,66 +145,181 @@ Deno.serve(async (req: Request) => {
           content: message,
         });
 
-        // 3. Récupérer le contexte RAG (voir Edge Function `search-library`).
-        //    TODO : embedding du message + appel à match_document_chunks().
-        const citations: unknown[] = [];
+        // 3. Contexte RAG (bibliothèque personnelle).
+        const citations: Citation[] = [];
+        let ragContextBlock = '';
 
-        const messageId = crypto.randomUUID();
-        push('init', { conversationId, messageId, citations, sourcesCount: citations.length });
+        if (wantsLibrary) {
+          try {
+            const queryEmbedding = await embedText(message, groqKey);
+            const { data: matches } = await supabase.rpc('match_document_chunks', {
+              query_embedding: queryEmbedding,
+              match_threshold: 0.65,
+              match_count: 8,
+              p_user_id: userId,
+              p_document_id: documentId ?? null,
+              p_folder_id: folderId ?? null,
+            });
 
-        // 4. Appeler l'API Groq (compatible OpenAI) en streaming.
-        const groqKey = Deno.env.get('GROQ_API_KEY');
-        if (!groqKey) throw new Error('GROQ_API_KEY manquante.');
+            for (const row of (matches ?? []) as Array<{
+              document_title: string;
+              page_number: number;
+              section_title: string | null;
+              content: string;
+              similarity: number;
+            }>) {
+              const citationNumber = citations.length + 1;
+              citations.push({
+                citationNumber,
+                type: 'rag',
+                title: row.document_title,
+                documentName: row.document_title,
+                pageNumber: row.page_number,
+                sectionTitle: row.section_title ?? undefined,
+                relevanceScore: row.similarity,
+                excerptText: truncate(row.content),
+              });
+            }
 
-        const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'content-type': 'application/json',
-            Authorization: `Bearer ${groqKey}`,
-          },
-          body: JSON.stringify({
-            model: GROQ_MODEL,
-            max_tokens: 2048,
-            temperature: 0.3,
-            stream: true,
-            messages: [
-              { role: 'system', content: SYSTEM_PROMPT },
-              { role: 'user', content: message },
-            ],
-          }),
-        });
-
-        if (!groqResponse.ok || !groqResponse.body) {
-          const errBody = await groqResponse.text();
-          throw new Error(`Groq API error (${groqResponse.status}): ${errBody}`);
+            if (citations.length > 0) {
+              ragContextBlock = `\n\nExtraits pertinents de la bibliothèque de l'utilisateur :\n${citations
+                .map((c) => `[${c.citationNumber}] ${c.title} (page ${c.pageNumber}) : ${c.excerptText}`)
+                .join('\n')}`;
+            }
+          } catch (ragErr) {
+            // La recherche RAG ne doit jamais empêcher la réponse ; on continue sans contexte bibliothèque.
+            console.error('RAG lookup failed', ragErr);
+          }
         }
 
+        const messageId = crypto.randomUUID();
+
+        // 4. Appel au modèle Groq. Deux chemins selon le besoin de recherche web :
+        //    - bibliothèque seule -> streaming token par token (llama-3.3-70b-versatile)
+        //    - web activé -> Groq Compound (recherche web intégrée, croise plusieurs
+        //      sources en mode "deep"), un seul appel non streamé pour récupérer les
+        //      sources de façon fiable, puis re-diffusé en fragments côté serveur pour
+        //      respecter le même contrat SSE.
+        const systemContent = wantsWeb
+          ? SYSTEM_PROMPT + WEB_SEARCH_INSTRUCTIONS + ragContextBlock
+          : SYSTEM_PROMPT + ragContextBlock;
+        const messages = [
+          { role: 'system', content: systemContent },
+          { role: 'user', content: message },
+        ];
+
         let fullText = '';
-        const reader = groqResponse.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
 
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
+        if (wantsWeb) {
+          // Liste blanche des sources médicales : préférences utilisateur +
+          // sources internationales toujours incluses.
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('preferences')
+            .eq('id', userId)
+            .single();
+          const allowedSources = (profile?.preferences?.allowed_web_sources ?? {}) as Record<string, boolean>;
+          const includeDomains = [
+            ...Object.entries(SOURCE_DOMAINS)
+              .filter(([key]) => allowedSources[key] !== false) // activé par défaut si non renseigné
+              .flatMap(([, domains]) => domains),
+            ...ALWAYS_INCLUDED_DOMAINS,
+          ];
 
-          const lines = buffer.split('\n');
-          buffer = lines.pop() ?? '';
+          const webModel = searchMode === 'quick' ? WEB_MODEL_QUICK : WEB_MODEL_DEEP;
 
-          for (const line of lines) {
-            if (!line.startsWith('data: ')) continue;
-            const dataStr = line.slice(6).trim();
-            if (!dataStr || dataStr === '[DONE]') continue;
-            try {
-              const evt = JSON.parse(dataStr);
-              const delta = evt.choices?.[0]?.delta?.content;
-              if (delta) {
-                fullText += delta;
-                push('delta', { text: delta });
+          const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', Authorization: `Bearer ${groqKey}` },
+            body: JSON.stringify({
+              model: webModel,
+              max_tokens: 2048,
+              temperature: 0.3,
+              messages,
+              search_settings: { include_domains: includeDomains },
+            }),
+          });
+
+          if (!groqResponse.ok) {
+            throw new Error(`Groq API error (${groqResponse.status}): ${await groqResponse.text()}`);
+          }
+
+          const completion = await groqResponse.json();
+          fullText = completion.choices?.[0]?.message?.content ?? '';
+
+          const executedTools = completion.choices?.[0]?.message?.executed_tools as
+            | Array<{
+                search_results?: Array<{
+                  title?: string;
+                  url?: string;
+                  content?: string;
+                  snippet?: string;
+                  published_date?: string;
+                  score?: number;
+                }>;
+              }>
+            | undefined;
+          const webResults = executedTools?.flatMap((t) => t.search_results ?? []) ?? [];
+
+          for (const result of webResults) {
+            citations.push({
+              citationNumber: citations.length + 1,
+              type: 'web',
+              title: result.title ?? result.url ?? 'Source web',
+              url: result.url,
+              publicationDate: result.published_date,
+              relevanceScore: result.score,
+              excerptText: truncate(result.content ?? result.snippet ?? ''),
+            });
+          }
+
+          push('init', { conversationId, messageId, citations, sourcesCount: citations.length });
+
+          // Re-diffusion en fragments pour respecter le contrat SSE côté app.
+          const words = fullText.split(/(\s+)/);
+          const FRAGMENT_SIZE = 6;
+          for (let i = 0; i < words.length; i += FRAGMENT_SIZE) {
+            push('delta', { text: words.slice(i, i + FRAGMENT_SIZE).join('') });
+          }
+        } else {
+          push('init', { conversationId, messageId, citations, sourcesCount: citations.length });
+
+          const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', Authorization: `Bearer ${groqKey}` },
+            body: JSON.stringify({ model: LIBRARY_MODEL, max_tokens: 2048, temperature: 0.3, stream: true, messages }),
+          });
+
+          if (!groqResponse.ok || !groqResponse.body) {
+            throw new Error(`Groq API error (${groqResponse.status}): ${await groqResponse.text()}`);
+          }
+
+          const reader = groqResponse.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = '';
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+
+            const lines = buffer.split('\n');
+            buffer = lines.pop() ?? '';
+
+            for (const line of lines) {
+              if (!line.startsWith('data: ')) continue;
+              const dataStr = line.slice(6).trim();
+              if (!dataStr || dataStr === '[DONE]') continue;
+              try {
+                const evt = JSON.parse(dataStr);
+                const delta = evt.choices?.[0]?.delta?.content;
+                if (delta) {
+                  fullText += delta;
+                  push('delta', { text: delta });
+                }
+              } catch {
+                // fragment JSON partiel, ignoré
               }
-            } catch {
-              // fragment JSON partiel, ignoré
             }
           }
         }

@@ -74,6 +74,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   final FocusNode _inputFocusNode = FocusNode();
 
   SourceFilterMode _selectedFilter = SourceFilterMode.all;
+  bool _deepSearch = true; // Mode Approfondi (plusieurs recherches web) vs Rapide (1 recherche)
   int _currentNavIndex = 0;
   String? _activeConversationId;
 
@@ -150,6 +151,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             query: queryText,
             conversationId: _activeConversationId,
             sourcesMode: _sourcesModeString,
+            searchMode: _deepSearch ? 'deep' : 'quick',
             onTokenReceived: _scrollToBottom,
             onCompleted: () {
               HapticFeedback.mediumImpact();
@@ -369,6 +371,20 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               isSelected: _selectedFilter == SourceFilterMode.webVerified,
               onTap: () => setState(() => _selectedFilter = SourceFilterMode.webVerified),
             ),
+            if (_selectedFilter != SourceFilterMode.libraryRAG) ...[
+              const SizedBox(width: 8),
+              Container(width: 1, height: 20, color: AppColors.surfaceContainerHigh),
+              const SizedBox(width: 8),
+              _buildFilterPill(
+                title: _deepSearch ? 'Approfondi' : 'Rapide',
+                icon: _deepSearch ? Icons.travel_explore_rounded : Icons.bolt_rounded,
+                isSelected: _deepSearch,
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  setState(() => _deepSearch = !_deepSearch);
+                },
+              ),
+            ],
           ],
         ),
       ),
