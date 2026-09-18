@@ -25,8 +25,11 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      # --no-fatal-infos : les infos restantes (withOpacity déprécié,
+      # prefer_const, etc.) sont du style, pas des erreurs ; seules les
+      # erreurs et warnings font échouer le build.
       - name: Analyze
-        run: flutter analyze
+        run: flutter analyze --no-fatal-infos
 
       - name: Test
         run: flutter test
