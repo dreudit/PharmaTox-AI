@@ -21,9 +21,10 @@ et les spécifications UI/UX dans [`docs/specifications-ui-ux.md`](docs/specific
 - ✅ Projet Supabase branché par défaut (`pqwdmxuppitudhjgnxnv`), migration et
   secrets à appliquer manuellement (voir plus bas — bloqué par le réseau de
   cette sandbox, pas par le code).
+- ✅ Pipeline vocal complet (micro natif → chat → synthèse vocale native),
+  boucle continue et interruption (`lib/features/voice/providers/voice_session_provider.dart`).
 - ⏳ À compléter : extraction réelle de texte PDF/DOCX dans `ingest-document`,
-  calcul d'embeddings, recherche web sourcée (`web-search`), synthèse vocale
-  (TTS) et branchement de `VoiceScreen`/`stt` sur de l'audio réel, connecteurs
+  calcul d'embeddings, recherche web sourcée (`web-search`), connecteurs
   MCP (`mcp-proxy`), quotas (`usage-guard`).
 
 ## Démarrer le projet Flutter
