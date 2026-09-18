@@ -48,6 +48,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trg_profiles_updated_at ON public.profiles;
 CREATE TRIGGER trg_profiles_updated_at
     BEFORE UPDATE ON public.profiles
     FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
@@ -80,6 +81,7 @@ CREATE TABLE IF NOT EXISTS public.conversations (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+DROP TRIGGER IF EXISTS trg_conversations_updated_at ON public.conversations;
 CREATE TRIGGER trg_conversations_updated_at
     BEFORE UPDATE ON public.conversations
     FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
@@ -130,6 +132,7 @@ CREATE TABLE IF NOT EXISTS public.documents (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+DROP TRIGGER IF EXISTS trg_documents_updated_at ON public.documents;
 CREATE TRIGGER trg_documents_updated_at
     BEFORE UPDATE ON public.documents
     FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
@@ -272,63 +275,59 @@ ALTER TABLE public.mcp_servers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.usage_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.feedback ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Utilisateur gère son propre profil" ON public.profiles;
 CREATE POLICY "Utilisateur gère son propre profil"
 ON public.profiles FOR ALL TO authenticated
 USING (auth.uid() = id) WITH CHECK (auth.uid() = id);
 
+DROP POLICY IF EXISTS "Utilisateur gère ses conversations" ON public.conversations;
 CREATE POLICY "Utilisateur gère ses conversations"
 ON public.conversations FOR ALL TO authenticated
 USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Utilisateur lit et écrit ses messages" ON public.messages;
 CREATE POLICY "Utilisateur lit et écrit ses messages"
 ON public.messages FOR ALL TO authenticated
 USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Utilisateur gère ses dossiers" ON public.folders;
 CREATE POLICY "Utilisateur gère ses dossiers"
 ON public.folders FOR ALL TO authenticated
 USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Utilisateur gère ses documents" ON public.documents;
 CREATE POLICY "Utilisateur gère ses documents"
 ON public.documents FOR ALL TO authenticated
 USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Isolation stricte des segments vectoriels" ON public.document_chunks;
 CREATE POLICY "Isolation stricte des segments vectoriels"
 ON public.document_chunks FOR ALL TO authenticated
 USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Utilisateur gère ses serveurs MCP" ON public.mcp_servers;
 CREATE POLICY "Utilisateur gère ses serveurs MCP"
 ON public.mcp_servers FOR ALL TO authenticated
 USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Utilisateur consulte ses propres logs" ON public.usage_logs;
 CREATE POLICY "Utilisateur consulte ses propres logs"
 ON public.usage_logs FOR SELECT TO authenticated
 USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Utilisateur insère ses propres logs" ON public.usage_logs;
 CREATE POLICY "Utilisateur insère ses propres logs"
 ON public.usage_logs FOR INSERT TO authenticated
 WITH CHECK (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Utilisateur gère son propre feedback" ON public.feedback;
 CREATE POLICY "Utilisateur gère son propre feedback"
 ON public.feedback FOR ALL TO authenticated
 USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
--- -----------------------------------------------------------------------------
--- 10. BUCKET STORAGE PRIVÉ POUR LES DOCUMENTS
--- -----------------------------------------------------------------------------
-INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-VALUES (
-    'documents',
-    'documents',
-    false, -- Bucket privé (URL signée requise)
-    52428800, -- 50 Mo par fichier
-    ARRAY['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain']
-)
-ON CONFLICT (id) DO UPDATE SET
-    public = false,
-    file_size_limit = 52428800;
-
--- RLS sur le Storage : chemin structuré strict 'user_id/...'
-CREATE POLICY "Utilisateur accède uniquement à ses fichiers"
-ON storage.objects FOR ALL TO authenticated
-USING (bucket_id = 'documents' AND (storage.foldername(name))[1] = auth.uid()::text)
-WITH CHECK (bucket_id = 'documents' AND (storage.foldername(name))[1] = auth.uid()::text);
+-- Le bucket Storage (section 10) est volontairement dans une migration
+-- séparée (20250101000001_storage_bucket.sql) : storage.buckets et
+-- storage.objects appartiennent au rôle supabase_storage_admin, et une
+-- erreur de permission dessus ne doit jamais faire échouer/annuler tout
+-- le schéma applicatif ci-dessus (le SQL Editor de Supabase exécute
+-- chaque script dans une seule transaction).
