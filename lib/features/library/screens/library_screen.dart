@@ -490,7 +490,7 @@ class _DocumentUploadBottomSheetState extends State<_DocumentUploadBottomSheet> 
       _errorMessage = null;
     });
 
-    final result = await FilePicker.platform.pickFiles(
+    final result = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['pdf', 'docx', 'txt'],
       withData: true,

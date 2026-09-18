@@ -50,7 +50,7 @@ dependencies:
   # --- Utilitaires Réseau, Deep Linking & Utilitaires Métier ---
   http: ^1.2.0                        # Appels HTTP directs et streaming SSE
   url_launcher: ^6.2.5                # Ouverture sécurisée des liens PubMed, ANSM, HAS
-  file_picker: ^6.2.0                 # Sélection de documents PDF/DOCX/TXT à téléverser
+  file_picker: ^11.0.3                # Sélection de documents PDF/DOCX/TXT à téléverser
   intl: ^0.19.0                       # Horodatage médical et localisation française
   uuid: ^4.3.3                        # Génération d'identifiants de corrélation de requêtes
   connectivity_plus: ^6.0.0           # Détection en temps réel du statut réseau
