@@ -6,7 +6,7 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
 
     <application
-        android:label="drugs_ia_app"
+        android:label="Drugs IA"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

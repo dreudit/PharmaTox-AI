@@ -63,6 +63,8 @@ class DrugsIaApp extends StatelessWidget {
           final doc = settings.arguments is LibraryDocumentModel ? settings.arguments as LibraryDocumentModel : null;
           return MaterialPageRoute(
             builder: (context) => DocumentDetailScreen(
+              documentId: doc?.id ?? '',
+              storagePath: doc?.storagePath ?? '',
               documentTitle: doc?.title ?? 'Document',
               fileFormat: doc?.fileFormat ?? 'PDF',
               pageCount: doc?.pageCount ?? 0,

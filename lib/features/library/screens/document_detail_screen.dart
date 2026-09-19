@@ -5,6 +5,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../core/network/supabase_client.dart';
 import '../../../core/theme/app_colors.dart';
 
 class DocumentChunkModel {
@@ -27,6 +28,8 @@ class DocumentChunkModel {
 
 /// Écran de détail d'un document : métadonnées, statut, segments vectorisés.
 class DocumentDetailScreen extends StatefulWidget {
+  final String documentId;
+  final String storagePath;
   final String documentTitle;
   final String fileFormat;
   final int pageCount;
@@ -35,6 +38,8 @@ class DocumentDetailScreen extends StatefulWidget {
 
   const DocumentDetailScreen({
     super.key,
+    required this.documentId,
+    required this.storagePath,
     required this.documentTitle,
     this.fileFormat = 'PDF',
     this.pageCount = 0,
@@ -49,6 +54,7 @@ class DocumentDetailScreen extends StatefulWidget {
 class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
   int _selectedTab = 0; // 0 = Segments, 1 = Métadonnées
   final TextEditingController _chunkSearchController = TextEditingController();
+  bool _isDeleting = false;
 
   // TODO: remplacer par une requête Supabase sur `document_chunks`
   // (SELECT ... WHERE document_id = :id ORDER BY chunk_index ASC).
@@ -94,7 +100,13 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
       title: const Text('Détail du document', style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 16.5, fontWeight: FontWeight.w700, color: AppColors.primaryText, letterSpacing: -0.02)),
       actions: [
         IconButton(icon: const Icon(Icons.refresh_rounded, color: AppColors.secondaryText), onPressed: () => HapticFeedback.lightImpact(), tooltip: 'Ré-indexer'),
-        IconButton(icon: const Icon(Icons.delete_outline_rounded, color: AppColors.errorRed), onPressed: _confirmDeletionDialog, tooltip: 'Supprimer'),
+        IconButton(
+          icon: _isDeleting
+              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.errorRed))
+              : const Icon(Icons.delete_outline_rounded, color: AppColors.errorRed),
+          onPressed: _isDeleting ? null : _confirmDeletionDialog,
+          tooltip: 'Supprimer',
+        ),
         const SizedBox(width: 8),
       ],
     );
@@ -318,7 +330,7 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
           ElevatedButton(
             onPressed: () {
               Navigator.pop(context);
-              Navigator.pop(context);
+              _deleteDocument();
             },
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.errorRed, foregroundColor: Colors.white, elevation: 0, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9999))),
             child: const Text('Supprimer'),
@@ -326,5 +338,25 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _deleteDocument() async {
+    setState(() => _isDeleting = true);
+    try {
+      if (widget.storagePath.isNotEmpty) {
+        await supabase.storage.from('documents').remove([widget.storagePath]);
+      }
+      // Supprime la ligne `documents` ; `document_chunks` est purgé
+      // automatiquement via la contrainte de clé étrangère ON DELETE CASCADE.
+      await supabase.from('documents').delete().eq('id', widget.documentId);
+      if (mounted) Navigator.of(context).pop();
+    } catch (err) {
+      if (mounted) {
+        setState(() => _isDeleting = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Échec de la suppression : $err'), backgroundColor: AppColors.errorRed),
+        );
+      }
+    }
   }
 }

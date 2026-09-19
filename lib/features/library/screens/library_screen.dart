@@ -39,6 +39,7 @@ class LibraryDocumentModel {
   final DateTime updatedAt;
   final IngestionStatus status;
   final double? indexingProgress;
+  final String storagePath;
 
   const LibraryDocumentModel({
     required this.id,
@@ -50,6 +51,7 @@ class LibraryDocumentModel {
     required this.chunkCount,
     required this.updatedAt,
     required this.status,
+    required this.storagePath,
     this.indexingProgress,
   });
 
@@ -64,6 +66,7 @@ class LibraryDocumentModel {
       chunkCount: (row['chunk_count'] as int?) ?? 0,
       updatedAt: DateTime.tryParse(row['updated_at'] as String? ?? '') ?? DateTime.now(),
       status: _statusFromDb(row['status'] as String? ?? 'pending'),
+      storagePath: row['storage_path'] as String? ?? '',
     );
   }
 }
@@ -397,7 +400,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
-        onTap: () => Navigator.of(context).pushNamed('/library/document', arguments: doc),
+        onTap: () async {
+          await Navigator.of(context).pushNamed('/library/document', arguments: doc);
+          _loadDocuments();
+        },
         child: Padding(
           padding: const EdgeInsets.all(14.0),
           child: Column(
