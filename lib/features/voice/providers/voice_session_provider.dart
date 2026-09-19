@@ -95,13 +95,25 @@ class VoiceSessionNotifier extends StateNotifier<VoiceSessionUiState> {
 
     _speechAvailable = await _speech.initialize(
       onStatus: (status) {
-        if (status == 'notListening' && state.sessionState == VoiceSessionState.listening) {
-          // Le moteur natif s'arrête après un silence : on relance sauf si
-          // on est passé sur un autre état (réflexion, parole, muet).
+        // Le moteur natif s'arrête tout seul après un court silence (timeout
+        // système, souvent 2-5s selon le téléphone), sans forcément avoir
+        // produit de résultat final. Si on est toujours censé écouter (aucune
+        // bascule vers réflexion/parole/muet entre-temps), on relance
+        // immédiatement l'écoute pour ne pas laisser le micro mort.
+        if ((status == 'notListening' || status == 'done') &&
+            !_sessionEnded &&
+            state.sessionState == VoiceSessionState.listening) {
+          _startListening();
         }
       },
       onError: (err) {
         state = state.copyWith(errorMessage: 'Erreur reconnaissance vocale : ${err.errorMsg}');
+        // La plupart des erreurs natives (pas de correspondance, timeout de
+        // silence, micro momentanément occupé) ne sont pas fatales : on
+        // relance l'écoute au lieu de laisser la session bloquée en silence.
+        if (!err.permanent && !_sessionEnded && state.sessionState == VoiceSessionState.listening) {
+          _startListening();
+        }
       },
     );
 
@@ -127,7 +139,15 @@ class VoiceSessionNotifier extends StateNotifier<VoiceSessionUiState> {
           _handleUserUtterance(result.recognizedWords.trim());
         }
       },
-      listenOptions: SpeechListenOptions(localeId: 'fr_FR'),
+      listenOptions: SpeechListenOptions(
+        localeId: 'fr_FR',
+        // Tolère les hésitations naturelles d'une question clinique (le
+        // timeout de silence par défaut du moteur natif est souvent trop
+        // court, 2-5s selon l'appareil) sans laisser une session muette
+        // indéfiniment si l'utilisateur ne parle finalement pas.
+        pauseFor: const Duration(seconds: 6),
+        listenFor: const Duration(seconds: 45),
+      ),
     );
   }
 
@@ -142,6 +162,15 @@ class VoiceSessionNotifier extends StateNotifier<VoiceSessionUiState> {
             onCompleted: () async {
               final responseText = _ref.read(chatStreamNotifierProvider).accumulatedText;
               await _speak(responseText);
+            },
+            // La requête part en tâche de fond (le flux SSE est piloté par
+            // événements) : sans ce relais, une erreur serveur ou un
+            // timeout laissait la session bloquée en "réflexion" pour
+            // toujours, car seul `onCompleted` déclenchait la suite.
+            onError: (message) async {
+              if (_sessionEnded) return;
+              state = state.copyWith(errorMessage: message);
+              await _speak("Désolé, je n'ai pas pu obtenir de réponse. Vous pouvez reposer votre question.");
             },
           );
     } catch (err) {

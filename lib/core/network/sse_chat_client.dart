@@ -369,6 +369,7 @@ class ChatStreamNotifier extends StateNotifier<ChatStreamingState> {
     String? documentId,
     VoidCallback? onTokenReceived,
     VoidCallback? onCompleted,
+    void Function(String message)? onError,
   }) async {
     await cancelStream();
 
@@ -411,13 +412,13 @@ class ChatStreamNotifier extends StateNotifier<ChatStreamingState> {
               onCompleted?.call();
             } else if (event is ChatErrorEvent) {
               state = state.copyWith(status: StreamStatus.error, errorMessage: event.error);
+              onError?.call(event.error);
             }
           },
           onError: (err) {
-            state = state.copyWith(
-              status: StreamStatus.error,
-              errorMessage: 'Erreur réseau critique : $err',
-            );
+            final message = 'Erreur réseau critique : $err';
+            state = state.copyWith(status: StreamStatus.error, errorMessage: message);
+            onError?.call(message);
           },
           cancelOnError: true,
         );
