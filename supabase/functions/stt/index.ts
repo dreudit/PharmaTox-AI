@@ -12,7 +12,12 @@
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
+import { corsHeaders, handlePreflight } from '../_shared/cors.ts';
+
 Deno.serve(async (req: Request) => {
+  const preflight = handlePreflight(req);
+  if (preflight) return preflight;
+
   const authHeader = req.headers.get('Authorization') ?? '';
   const supabase = createClient(
     Deno.env.get('SUPABASE_URL')!,
@@ -22,18 +27,24 @@ Deno.serve(async (req: Request) => {
 
   const { data: userData, error: userError } = await supabase.auth.getUser();
   if (userError || !userData.user) {
-    return new Response('Unauthorized', { status: 401 });
+    return new Response('Unauthorized', { status: 401, headers: corsHeaders });
   }
 
   const groqKey = Deno.env.get('GROQ_API_KEY');
   if (!groqKey) {
-    return new Response(JSON.stringify({ error: 'GROQ_API_KEY manquante côté serveur.' }), { status: 500 });
+    return new Response(JSON.stringify({ error: 'GROQ_API_KEY manquante côté serveur.' }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
   }
 
   const incomingForm = await req.formData();
   const audioFile = incomingForm.get('audio');
   if (!(audioFile instanceof File)) {
-    return new Response(JSON.stringify({ error: "Champ 'audio' manquant ou invalide." }), { status: 400 });
+    return new Response(JSON.stringify({ error: "Champ 'audio' manquant ou invalide." }), {
+      status: 400,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
   }
 
   const language = (incomingForm.get('language') as string) ?? 'fr';
@@ -54,11 +65,12 @@ Deno.serve(async (req: Request) => {
     const errBody = await groqResponse.text();
     return new Response(JSON.stringify({ error: `Groq STT error (${groqResponse.status}): ${errBody}` }), {
       status: 502,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 
   const result = await groqResponse.json();
   return new Response(JSON.stringify({ text: result.text ?? '' }), {
-    headers: { 'Content-Type': 'application/json' },
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   });
 });

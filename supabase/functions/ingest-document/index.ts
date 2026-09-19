@@ -14,6 +14,7 @@ import { extractText, getDocumentProxy } from 'npm:unpdf@0.12.1';
 import JSZip from 'npm:jszip@3.10.1';
 
 import { embedTexts } from '../_shared/groq.ts';
+import { corsHeaders, handlePreflight } from '../_shared/cors.ts';
 
 interface IngestRequestBody {
   documentId: string;
@@ -55,6 +56,9 @@ async function extractDocxText(buffer: Uint8Array): Promise<string> {
 }
 
 Deno.serve(async (req: Request) => {
+  const preflight = handlePreflight(req);
+  if (preflight) return preflight;
+
   const authHeader = req.headers.get('Authorization') ?? '';
   const supabase = createClient(
     Deno.env.get('SUPABASE_URL')!,
@@ -64,7 +68,7 @@ Deno.serve(async (req: Request) => {
 
   const { data: userData, error: userError } = await supabase.auth.getUser();
   if (userError || !userData.user) {
-    return new Response('Unauthorized', { status: 401 });
+    return new Response('Unauthorized', { status: 401, headers: corsHeaders });
   }
   const userId = userData.user.id;
 
@@ -78,7 +82,10 @@ Deno.serve(async (req: Request) => {
     .single();
 
   if (docError || !document) {
-    return new Response(JSON.stringify({ error: 'Document introuvable.' }), { status: 404 });
+    return new Response(JSON.stringify({ error: 'Document introuvable.' }), {
+      status: 404,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
   }
 
   try {
@@ -157,10 +164,13 @@ Deno.serve(async (req: Request) => {
 
     return new Response(
       JSON.stringify({ status: 'ready', chunks: pendingChunks.length, pages: pages.length }),
-      { headers: { 'Content-Type': 'application/json' } },
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     );
   } catch (err) {
     await supabase.from('documents').update({ status: 'error', error_message: String(err) }).eq('id', documentId);
-    return new Response(JSON.stringify({ error: String(err) }), { status: 500 });
+    return new Response(JSON.stringify({ error: String(err) }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
   }
 });

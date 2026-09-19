@@ -10,6 +10,7 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
 import { embedText } from '../_shared/groq.ts';
+import { corsHeaders, handlePreflight } from '../_shared/cors.ts';
 
 interface SearchRequestBody {
   query: string;
@@ -19,6 +20,9 @@ interface SearchRequestBody {
 }
 
 Deno.serve(async (req: Request) => {
+  const preflight = handlePreflight(req);
+  if (preflight) return preflight;
+
   const authHeader = req.headers.get('Authorization') ?? '';
   const supabase = createClient(
     Deno.env.get('SUPABASE_URL')!,
@@ -28,21 +32,27 @@ Deno.serve(async (req: Request) => {
 
   const { data: userData, error: userError } = await supabase.auth.getUser();
   if (userError || !userData.user) {
-    return new Response('Unauthorized', { status: 401 });
+    return new Response('Unauthorized', { status: 401, headers: corsHeaders });
   }
 
   const { query, documentId, folderId, matchCount = 8 } = (await req.json()) as SearchRequestBody;
 
   const groqKey = Deno.env.get('GROQ_API_KEY');
   if (!groqKey) {
-    return new Response(JSON.stringify({ error: 'GROQ_API_KEY manquante.' }), { status: 500 });
+    return new Response(JSON.stringify({ error: 'GROQ_API_KEY manquante.' }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
   }
 
   let queryEmbedding: number[];
   try {
     queryEmbedding = await embedText(query, groqKey);
   } catch (err) {
-    return new Response(JSON.stringify({ error: String(err) }), { status: 502 });
+    return new Response(JSON.stringify({ error: String(err) }), {
+      status: 502,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
   }
 
   const { data, error } = await supabase.rpc('match_document_chunks', {
@@ -55,10 +65,13 @@ Deno.serve(async (req: Request) => {
   });
 
   if (error) {
-    return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+    return new Response(JSON.stringify({ error: error.message }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
   }
 
   return new Response(JSON.stringify({ results: data }), {
-    headers: { 'Content-Type': 'application/json' },
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   });
 });

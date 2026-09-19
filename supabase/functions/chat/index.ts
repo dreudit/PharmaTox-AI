@@ -18,6 +18,7 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
 import { embedText } from '../_shared/groq.ts';
+import { corsHeaders, handlePreflight } from '../_shared/cors.ts';
 
 const LIBRARY_MODEL = 'llama-3.3-70b-versatile';
 // groq/compound : recherche web intégrée (Tavily), plusieurs recherches par requête si
@@ -96,6 +97,9 @@ function truncate(text: string, max = 400): string {
 }
 
 Deno.serve(async (req: Request) => {
+  const preflight = handlePreflight(req);
+  if (preflight) return preflight;
+
   const startedAt = Date.now();
 
   const authHeader = req.headers.get('Authorization') ?? '';
@@ -107,7 +111,7 @@ Deno.serve(async (req: Request) => {
 
   const { data: userData, error: userError } = await supabase.auth.getUser();
   if (userError || !userData.user) {
-    return new Response('Unauthorized', { status: 401 });
+    return new Response('Unauthorized', { status: 401, headers: corsHeaders });
   }
   const userId = userData.user.id;
 
@@ -347,6 +351,7 @@ Deno.serve(async (req: Request) => {
 
   return new Response(stream, {
     headers: {
+      ...corsHeaders,
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       Connection: 'keep-alive',
