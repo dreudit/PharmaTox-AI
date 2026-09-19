@@ -9,12 +9,11 @@ build/
 *.g.dart
 *.freezed.dart
 
-# Platform folders non nécessaires (app Android uniquement, cf. android/ ci-dessous)
+# Platform folders non nécessaires (app Android + web, cf. android/ et web/ ci-dessous)
 /ios/
 /linux/
 /macos/
 /windows/
-/web/
 
 # Android : versionné pour piloter le build CI (minSdk, Firebase App
 # Distribution), à l'exception des fichiers générés/locaux ci-dessous.
