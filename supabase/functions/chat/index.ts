@@ -97,8 +97,13 @@ function truncate(text: string, max = 400): string {
 }
 
 Deno.serve(async (req: Request) => {
+  console.log(`[DIAG] incoming request: method=${req.method} url=${req.url}`);
+
   const preflight = handlePreflight(req);
-  if (preflight) return preflight;
+  if (preflight) {
+    console.log('[DIAG] handled as CORS preflight, returning 200 with corsHeaders');
+    return preflight;
+  }
 
   const startedAt = Date.now();
 
@@ -111,7 +116,8 @@ Deno.serve(async (req: Request) => {
 
   const { data: userData, error: userError } = await supabase.auth.getUser();
   if (userError || !userData.user) {
-    return new Response('Unauthorized', { status: 401, headers: corsHeaders });
+    console.log(`[DIAG] auth.getUser failed: ${JSON.stringify(userError)}`);
+    return new Response('DIAG_UNAUTHORIZED_FROM_FUNCTION_CODE', { status: 401, headers: corsHeaders });
   }
   const userId = userData.user.id;
 
