@@ -241,7 +241,14 @@ class SseChatClient {
 
     http.StreamedResponse streamedResponse;
     try {
-      streamedResponse = await _httpClient.send(request);
+      // Filet de sécurité côté client : la fonction serveur borne elle-même
+      // ses appels Groq à ~28s, donc toute réponse (données ou erreur) doit
+      // arriver bien avant 45s. Sans ceci, un blocage serveur imprévu se
+      // traduirait par une attente indéfinie ("recherche sans fin") côté app.
+      streamedResponse = await _httpClient.send(request).timeout(
+        const Duration(seconds: 45),
+        onTimeout: () => throw TimeoutException('Le serveur clinique met trop de temps à répondre.'),
+      );
     } catch (netErr) {
       yield ChatErrorEvent("Échec de connexion au serveur clinique : $netErr");
       return;

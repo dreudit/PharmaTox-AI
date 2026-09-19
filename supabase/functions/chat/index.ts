@@ -107,6 +107,30 @@ async function groqErrorMessage(response: Response): Promise<string> {
   return `Groq API error (${response.status}): ${bodyText}`;
 }
 
+/// Les modèles groq/compound* exécutent une vraie recherche web en interne
+/// (appels à des moteurs de recherche tiers) et peuvent parfois traîner ou
+/// rester bloqués bien plus longtemps qu'un appel LLM classique. Sans
+/// limite de temps explicite, un tel blocage se traduit côté app par une
+/// attente indéfinie ("recherche sans fin") plutôt qu'une erreur claire.
+const GROQ_FETCH_TIMEOUT_MS = 28_000;
+
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs = GROQ_FETCH_TIMEOUT_MS): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      throw new Error(
+        "La recherche web Groq n'a pas répondu à temps (>28s). Réessayez, idéalement en mode « Rapide », ou décochez « Web » pour interroger uniquement votre bibliothèque.",
+      );
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 Deno.serve(async (req: Request) => {
   const preflight = handlePreflight(req);
   if (preflight) return preflight;
@@ -243,7 +267,7 @@ Deno.serve(async (req: Request) => {
 
           const webModel = searchMode === 'quick' ? WEB_MODEL_QUICK : WEB_MODEL_DEEP;
 
-          const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          const groqResponse = await fetchWithTimeout('https://api.groq.com/openai/v1/chat/completions', {
             method: 'POST',
             headers: { 'content-type': 'application/json', Authorization: `Bearer ${groqKey}` },
             body: JSON.stringify({
@@ -299,7 +323,7 @@ Deno.serve(async (req: Request) => {
         } else {
           push('init', { conversationId, messageId, citations, sourcesCount: citations.length });
 
-          const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          const groqResponse = await fetchWithTimeout('https://api.groq.com/openai/v1/chat/completions', {
             method: 'POST',
             headers: { 'content-type': 'application/json', Authorization: `Bearer ${groqKey}` },
             body: JSON.stringify({ model: LIBRARY_MODEL, max_tokens: 2048, temperature: 0.3, stream: true, messages }),
