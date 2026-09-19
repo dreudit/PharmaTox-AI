@@ -20,7 +20,10 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.drugsia.app.drugs_ia_app"
+        // Doit correspondre au package enregistré dans le projet Firebase
+        // "drugs-d1e2b" (App Distribution rejette tout APK dont le nom de
+        // paquet ne correspond pas exactement à celui de l'app Firebase).
+        applicationId = "com.drugs"
         // Android 12 (API 31) minimum, comme demandé — pas de support des
         // versions antérieures. Les APK de release incluent nativement
         // armeabi-v7a (32-bit) + arm64-v8a (64-bit) + x86_64 tant qu'on ne
