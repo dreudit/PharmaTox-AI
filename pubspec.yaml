@@ -8,7 +8,7 @@ name: drugs_ia_app
 description: "Drugs IA — application mobile d'intelligence clinique en pharmacologie et toxicologie (RAG + recherche web sourcée + voix)."
 publish_to: 'none' # Application privée hospitalière / usage personnel
 
-version: 1.0.0+1
+version: 1.0.1+24
 
 environment:
   sdk: '>=3.3.0 <4.0.0'

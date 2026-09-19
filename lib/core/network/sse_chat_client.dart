@@ -266,7 +266,18 @@ class SseChatClient {
     const lineSplitter = LineSplitter();
 
     try {
-      await for (final chunk in streamedResponse.stream.transform(utf8.decoder)) {
+      // Filet de sécurité complémentaire à celui sur .send() ci-dessus : celui-ci
+      // ne couvre que l'établissement de la connexion (arrivée des en-têtes), pas
+      // la suite du flux. Si le serveur reste bloqué en cours de streaming (ex. le
+      // timeout de 28s côté Edge Function n'est pas encore déployé), aucune donnée
+      // n'arrive jamais et la boucle ci-dessous attendrait indéfiniment sans ceci.
+      final timedStream = streamedResponse.stream.transform(utf8.decoder).timeout(
+        const Duration(seconds: 35),
+        onTimeout: (sink) {
+          sink.addError(TimeoutException('Le serveur clinique ne répond plus (flux interrompu).'));
+        },
+      );
+      await for (final chunk in timedStream) {
         final lines = lineSplitter.convert(chunk);
 
         for (final rawLine in lines) {
