@@ -306,6 +306,39 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     );
   }
 
+  static const List<({String label, String starter, IconData icon, List<Color> gradient})> _quickStarters = [
+    (
+      label: 'Posologie',
+      starter: 'Quelle est la posologie de ',
+      icon: Icons.medication_rounded,
+      gradient: [Color(0xFF7C3AED), Color(0xFFC026D3)],
+    ),
+    (
+      label: 'Toxidrome',
+      starter: 'Décris le toxidrome associé à ',
+      icon: Icons.warning_amber_rounded,
+      gradient: [Color(0xFFC026D3), Color(0xFFD946EF)],
+    ),
+    (
+      label: 'Interactions',
+      starter: 'Quelles sont les interactions médicamenteuses de ',
+      icon: Icons.hub_rounded,
+      gradient: [Color(0xFF6366F1), Color(0xFF818CF8)],
+    ),
+    (
+      label: 'Antidote',
+      starter: 'Quel est l\'antidote en cas d\'intoxication par ',
+      icon: Icons.healing_rounded,
+      gradient: [Color(0xFF7C3AED), Color(0xFF6366F1)],
+    ),
+  ];
+
+  void _applyQuickStarter(String starter) {
+    HapticFeedback.lightImpact();
+    _textController.value = TextEditingValue(text: starter, selection: TextSelection.collapsed(offset: starter.length));
+    _inputFocusNode.requestFocus();
+  }
+
   Widget _buildEmptyState() {
     return Center(
       child: Padding(
@@ -316,12 +349,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             Container(
               width: 72,
               height: 72,
-              decoration: BoxDecoration(
-                color: AppColors.surfaceContainerLowest,
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(colors: AppColors.heroGradient, begin: Alignment.topLeft, end: Alignment.bottomRight),
                 shape: BoxShape.circle,
-                border: Border.all(color: AppColors.surfaceContainerHigh),
               ),
-              child: const Icon(Icons.healing_rounded, size: 30, color: AppColors.accentTeal),
+              child: const Icon(Icons.auto_awesome_rounded, size: 28, color: Colors.white),
             ),
             const SizedBox(height: 16),
             const Text(
@@ -333,6 +365,60 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               'Pharmacologie, toxicologie, interactions, posologies sourcées.',
               textAlign: TextAlign.center,
               style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 12.5, color: AppColors.secondaryText),
+            ),
+            const SizedBox(height: 24),
+            GridView.count(
+              shrinkWrap: true,
+              crossAxisCount: 2,
+              mainAxisSpacing: 10,
+              crossAxisSpacing: 10,
+              childAspectRatio: 2.15,
+              physics: const NeverScrollableScrollPhysics(),
+              children: [
+                for (final quickStarter in _quickStarters)
+                  _buildQuickStarterChip(
+                    label: quickStarter.label,
+                    icon: quickStarter.icon,
+                    gradient: quickStarter.gradient,
+                    onTap: () => _applyQuickStarter(quickStarter.starter),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildQuickStarterChip({required String label, required IconData icon, required List<Color> gradient, required VoidCallback onTap}) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceContainerLowest,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.surfaceContainerHigh.withOpacity(0.7)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 30,
+              height: 30,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(colors: gradient, begin: Alignment.topLeft, end: Alignment.bottomRight),
+                borderRadius: BorderRadius.circular(9),
+              ),
+              child: Icon(icon, size: 16, color: Colors.white),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                label,
+                style: const TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 12.5, fontWeight: FontWeight.w600, color: AppColors.primaryText),
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ),

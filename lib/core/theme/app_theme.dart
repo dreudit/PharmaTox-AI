@@ -70,7 +70,7 @@ class AppTypography {
 }
 
 /// Configuration globale du ThemeData Flutter — design system
-/// "Serene Clinical Intelligence" (mode clair, mode sombre en phase 2).
+/// "Aurora Intelligence" (mode clair, mode sombre en phase 2).
 class AppTheme {
   AppTheme._();
 

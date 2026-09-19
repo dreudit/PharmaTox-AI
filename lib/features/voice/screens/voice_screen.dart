@@ -134,8 +134,8 @@ class _VoiceScreenState extends ConsumerState<VoiceScreen> with TickerProviderSt
   Widget _buildAmbientBacklight(VoiceSessionState currentState) {
     final Color baseColor = switch (currentState) {
       VoiceSessionState.listening => AppColors.accentTeal.withOpacity(0.12),
-      VoiceSessionState.thinking => AppColors.accentBlue.withOpacity(0.14),
-      VoiceSessionState.speaking => const Color(0xFF6366F1).withOpacity(0.12),
+      VoiceSessionState.thinking => const Color(0xFF6366F1).withOpacity(0.14),
+      VoiceSessionState.speaking => AppColors.accentBlue.withOpacity(0.12),
       VoiceSessionState.muted => AppColors.errorRed.withOpacity(0.08),
     };
 
@@ -150,8 +150,8 @@ class _VoiceScreenState extends ConsumerState<VoiceScreen> with TickerProviderSt
   Widget _buildVoiceStatusBadge(VoiceSessionState currentState) {
     final (String label, IconData icon, Color iconColor) = switch (currentState) {
       VoiceSessionState.listening => ('Écoute active...', Icons.mic_rounded, AppColors.accentTeal),
-      VoiceSessionState.thinking => ('Recherche et raisonnement...', Icons.bubble_chart_rounded, AppColors.accentBlue),
-      VoiceSessionState.speaking => ('Réponse en cours (touchez pour interrompre)', Icons.volume_up_rounded, const Color(0xFF4F46E5)),
+      VoiceSessionState.thinking => ('Recherche et raisonnement...', Icons.bubble_chart_rounded, const Color(0xFF6366F1)),
+      VoiceSessionState.speaking => ('Réponse en cours (touchez pour interrompre)', Icons.volume_up_rounded, AppColors.accentBlue),
       VoiceSessionState.muted => ('Microphone en pause', Icons.mic_off_rounded, AppColors.errorRed),
     };
 
@@ -304,9 +304,9 @@ class _SensoryOrbPainter extends CustomPainter {
     final baseRadius = (size.width / 2) * (0.82 + (pulseProgress * 0.08));
 
     final List<Color> gradientColors = switch (state) {
-      VoiceSessionState.listening => const [Color(0xFF0D9488), Color(0xFF14B8A6), Color(0xFF2DD4BF), Color(0xFFCCFBF1)],
-      VoiceSessionState.thinking => const [Color(0xFF0284C7), Color(0xFF38BDF8), Color(0xFF818CF8), Color(0xFFE0F2FE)],
-      VoiceSessionState.speaking => const [Color(0xFF4F46E5), Color(0xFF6366F1), Color(0xFF2DD4BF), Color(0xFFEEF2FF)],
+      VoiceSessionState.listening => const [Color(0xFF7C3AED), Color(0xFF9333EA), Color(0xFFC026D3), Color(0xFFEDE4FC)],
+      VoiceSessionState.thinking => const [Color(0xFF4F46E5), Color(0xFF6366F1), Color(0xFF8B5CF6), Color(0xFFEEF2FF)],
+      VoiceSessionState.speaking => const [Color(0xFFC026D3), Color(0xFFD946EF), Color(0xFF9333EA), Color(0xFFFAE4F8)],
       VoiceSessionState.muted => const [Color(0xFF94A3B8), Color(0xFFCBD5E1), Color(0xFFF1F5F9)],
     };
 
