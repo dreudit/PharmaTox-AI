@@ -33,3 +33,21 @@ file_size_limit = "50MiB"
 
 [edge_runtime]
 enabled = true
+
+# verify_jwt=false : chaque fonction vérifie elle-même le JWT via
+# supabase.auth.getUser() dans son propre code. La vérification par
+# défaut de la plateforme (avant l'exécution du code) rejette sinon la
+# requête OPTIONS de préflight CORS envoyée par le navigateur (qui ne
+# contient jamais d'en-tête Authorization), ce qui bloque tout appel
+# web même avec des en-têtes CORS corrects côté fonction.
+[functions.chat]
+verify_jwt = false
+
+[functions.ingest-document]
+verify_jwt = false
+
+[functions.search-library]
+verify_jwt = false
+
+[functions.stt]
+verify_jwt = false
