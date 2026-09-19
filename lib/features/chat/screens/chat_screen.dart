@@ -7,7 +7,10 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:markdown/markdown.dart' as md;
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/network/sse_chat_client.dart';
 import '../../../core/theme/app_colors.dart';
@@ -538,6 +541,54 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     );
   }
 
+  void _copyMessageToClipboard(String text) {
+    Clipboard.setData(ClipboardData(text: text));
+    HapticFeedback.lightImpact();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Réponse copiée.'), duration: Duration(seconds: 1, milliseconds: 400)),
+    );
+  }
+
+  static final MarkdownStyleSheet _markdownStyle = MarkdownStyleSheet(
+    p: const TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 14.5, height: 1.5, color: AppColors.primaryText),
+    strong: const TextStyle(fontFamily: 'Plus Jakarta Sans', fontWeight: FontWeight.w800, color: AppColors.primaryText),
+    em: const TextStyle(fontFamily: 'Plus Jakarta Sans', fontStyle: FontStyle.italic, color: AppColors.primaryText),
+    h1: const TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 19, fontWeight: FontWeight.w800, color: AppColors.primaryText, height: 1.6),
+    h2: const TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 17, fontWeight: FontWeight.w800, color: AppColors.primaryText, height: 1.6),
+    h3: const TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 15.5, fontWeight: FontWeight.w700, color: AppColors.primaryText, height: 1.6),
+    listBullet: const TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 14.5, color: AppColors.primaryText),
+    blockquote: const TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 13.5, color: AppColors.secondaryText, fontStyle: FontStyle.italic),
+    blockquoteDecoration: BoxDecoration(
+      color: AppColors.surfaceContainerLow,
+      borderRadius: BorderRadius.circular(8),
+      border: const Border(left: BorderSide(color: AppColors.accentTeal, width: 3)),
+    ),
+    code: const TextStyle(fontFamily: 'monospace', fontSize: 13, backgroundColor: AppColors.surfaceContainerLow, color: AppColors.accentBlue),
+    codeblockDecoration: BoxDecoration(color: AppColors.surfaceContainerLow, borderRadius: BorderRadius.circular(10)),
+    tableBorder: TableBorder.all(color: AppColors.surfaceContainerHigh, width: 1),
+    tableHead: const TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.primaryText),
+    tableBody: const TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 13, color: AppColors.primaryText),
+    tableCellsPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+    tableColumnWidth: const FlexColumnWidth(),
+    horizontalRuleDecoration: const BoxDecoration(border: Border(top: BorderSide(color: AppColors.surfaceContainerHigh))),
+    a: const TextStyle(fontFamily: 'Plus Jakarta Sans', color: AppColors.accentBlue, decoration: TextDecoration.underline),
+  );
+
+  /// Rendu Markdown (tableaux, gras, listes, citations en bloc...) des
+  /// réponses de l'assistant, au lieu d'un Text brut affichant la syntaxe
+  /// Markdown telle quelle.
+  Widget _buildAssistantMarkdown(String text) {
+    return MarkdownBody(
+      data: text,
+      selectable: true,
+      extensionSet: md.ExtensionSet.gitHubWeb,
+      styleSheet: _markdownStyle,
+      onTapLink: (linkText, href, title) {
+        if (href != null) launchUrl(Uri.parse(href), mode: LaunchMode.externalApplication);
+      },
+    );
+  }
+
   Widget _buildMessageBubble(ChatMessageModel msg, bool isActivelyStreamingThis) {
     final isUser = msg.sender == MessageSender.user;
 
@@ -578,11 +629,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       ),
                     ],
                   )
-                else
+                else if (isUser)
                   Text(
                     msg.text,
-                    style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 14.5, height: 1.5, color: isUser ? Colors.white : AppColors.primaryText),
-                  ),
+                    style: const TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 14.5, height: 1.5, color: Colors.white),
+                  )
+                else
+                  _buildAssistantMarkdown(msg.text),
                 if (!isUser && msg.citations.isNotEmpty) ...[
                   const SizedBox(height: 12),
                   const Divider(color: AppColors.surfaceContainerLow, height: 1),
@@ -612,6 +665,24 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               ],
             ),
           ),
+          if (!isUser && msg.text.isNotEmpty && !isActivelyStreamingThis) ...[
+            const SizedBox(height: 4),
+            InkWell(
+              onTap: () => _copyMessageToClipboard(msg.text),
+              borderRadius: BorderRadius.circular(8),
+              child: const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.copy_rounded, size: 13, color: AppColors.tertiaryText),
+                    SizedBox(width: 5),
+                    Text('Copier', style: TextStyle(fontFamily: 'Plus Jakarta Sans', fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.tertiaryText)),
+                  ],
+                ),
+              ),
+            ),
+          ],
           if (!isUser && msg.educationalNote != null) ...[
             const SizedBox(height: 6),
             Container(

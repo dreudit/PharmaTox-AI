@@ -25,6 +25,7 @@ dependencies:
   cupertino_icons: ^1.0.6
   google_fonts: ^6.1.0                # Solution de repli en ligne pour 'Plus Jakarta Sans'
   flutter_markdown: ^0.6.18+3         # Rendu Markdown des réponses cliniques
+  markdown: ^7.3.1                    # Extension GFM (tableaux) pour le rendu des réponses
   flutter_svg: ^2.0.9                 # Rendu des logos vectoriels et diagrammes
   shimmer: ^3.0.0                     # Animations de chargement soyeuses (placeholders)
 
