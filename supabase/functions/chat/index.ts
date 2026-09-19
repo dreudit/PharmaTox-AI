@@ -96,6 +96,17 @@ function truncate(text: string, max = 400): string {
   return text.length > max ? `${text.slice(0, max)}…` : text;
 }
 
+/// Traduit les erreurs Groq de quota/débit (413 « request too large » sur
+/// les tokens/minute, 429 rate limit) en message clair pour l'utilisateur,
+/// plutôt que de renvoyer le JSON brut de l'API.
+async function groqErrorMessage(response: Response): Promise<string> {
+  const bodyText = await response.text();
+  if (response.status === 413 || response.status === 429) {
+    return "Limite de débit Groq atteinte (trop de tokens/minute sur votre compte). Réessayez dans une minute, ou passez en mode « Rapide » qui consomme beaucoup moins de tokens par requête.";
+  }
+  return `Groq API error (${response.status}): ${bodyText}`;
+}
+
 Deno.serve(async (req: Request) => {
   const preflight = handlePreflight(req);
   if (preflight) return preflight;
@@ -245,7 +256,7 @@ Deno.serve(async (req: Request) => {
           });
 
           if (!groqResponse.ok) {
-            throw new Error(`Groq API error (${groqResponse.status}): ${await groqResponse.text()}`);
+            throw new Error(await groqErrorMessage(groqResponse));
           }
 
           const completion = await groqResponse.json();
@@ -295,7 +306,7 @@ Deno.serve(async (req: Request) => {
           });
 
           if (!groqResponse.ok || !groqResponse.body) {
-            throw new Error(`Groq API error (${groqResponse.status}): ${await groqResponse.text()}`);
+            throw new Error(await groqErrorMessage(groqResponse));
           }
 
           const reader = groqResponse.body.getReader();

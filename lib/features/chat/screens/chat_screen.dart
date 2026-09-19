@@ -74,7 +74,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   final FocusNode _inputFocusNode = FocusNode();
 
   SourceFilterMode _selectedFilter = SourceFilterMode.all;
-  bool _deepSearch = true; // Mode Approfondi (plusieurs recherches web) vs Rapide (1 recherche)
+  // Mode Rapide (1 recherche web, groq/compound-mini) par défaut : le mode
+  // Approfondi (groq/compound, recherches multiples) consomme nettement plus
+  // de tokens par requête côté Groq et peut dépasser une limite TPM basse
+  // (paliers gratuits/à faible quota) dès la première question.
+  bool _deepSearch = false;
   int _currentNavIndex = 0;
   String? _activeConversationId;
 
