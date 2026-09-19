@@ -24,7 +24,10 @@ jobs:
         run: flutter build web --release
 
       - name: Deploy to Firebase Hosting
-        if: ${{ secrets.FIREBASE_SERVICE_ACCOUNT != '' }}
+        # Le contexte `secrets` n'est pas autorisé dans une condition `if:` ;
+        # on réutilise `vars.FIREBASE_APP_ID` (même signal que build-android.yml)
+        # comme indicateur que Firebase est configuré côté dépôt.
+        if: ${{ vars.FIREBASE_APP_ID != '' }}
         uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
