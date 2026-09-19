@@ -1,11 +1,11 @@
 {
-    "name": "drugs_ia_app",
-    "short_name": "drugs_ia_app",
+    "name": "Drugs IA",
+    "short_name": "Drugs IA",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#EAF2F1",
+    "theme_color": "#1E2A38",
+    "description": "Drugs IA — assistant clinique de pharmacologie et toxicologie, RAG documentaire et recherche web vérifiée.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
