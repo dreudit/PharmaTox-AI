@@ -1,0 +1,35 @@
+{
+    "name": "Drugs IA",
+    "short_name": "Drugs IA",
+    "start_url": ".",
+    "display": "standalone",
+    "background_color": "#EAF2F1",
+    "theme_color": "#1E2A38",
+    "description": "Drugs IA — assistant clinique de pharmacologie et toxicologie, RAG documentaire et recherche web vérifiée.",
+    "orientation": "portrait-primary",
+    "prefer_related_applications": false,
+    "icons": [
+        {
+            "src": "icons/Icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png"
+        },
+        {
+            "src": "icons/Icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png"
+        },
+        {
+            "src": "icons/Icon-maskable-192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "maskable"
+        },
+        {
+            "src": "icons/Icon-maskable-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "maskable"
+        }
+    ]
+}

@@ -1,0 +1,38 @@
+# Flutter / Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
+*.g.dart
+*.freezed.dart
+
+# Platform folders non nécessaires (app Android + web, cf. android/ et web/ ci-dessous)
+/ios/
+/linux/
+/macos/
+/windows/
+
+# Android : versionné pour piloter le build CI (minSdk, Firebase App
+# Distribution), à l'exception des fichiers générés/locaux ci-dessous.
+android/.gradle/
+android/local.properties
+android/key.properties
+android/app/build/
+android/build/
+android/**/*.iml
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Environnement / secrets
+.env
+*.env.local
+
+# Supabase CLI local
+supabase/.branches
+supabase/.temp

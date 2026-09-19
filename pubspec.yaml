@@ -1,0 +1,92 @@
+# =============================================================================
+# TOXIA CLINICAL INTELLIGENCE 2026 - FLUTTER CONFIGURATION
+# Fichier : pubspec.yaml
+# Spécialisation : Pharmacologie d'Urgence, RAG Clinique & Assistance Vocale
+# =============================================================================
+
+name: drugs_ia_app
+description: "Drugs IA — application mobile d'intelligence clinique en pharmacologie et toxicologie (RAG + recherche web sourcée + voix)."
+publish_to: 'none' # Application privée hospitalière / usage personnel
+
+version: 1.0.1+24
+
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+  flutter: ">=3.19.0"
+
+# -----------------------------------------------------------------------------
+# DÉPENDANCES DE PRODUCTION
+# -----------------------------------------------------------------------------
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # --- Interface Utilisateur, Typographie & Icônes ---
+  cupertino_icons: ^1.0.6
+  google_fonts: ^6.1.0                # Solution de repli en ligne pour 'Plus Jakarta Sans'
+  flutter_markdown: ^0.6.18+3         # Rendu Markdown des réponses cliniques
+  markdown: ^7.3.1                    # Extension GFM (tableaux) pour le rendu des réponses
+  flutter_svg: ^2.0.9                 # Rendu des logos vectoriels et diagrammes
+  shimmer: ^3.0.0                     # Animations de chargement soyeuses (placeholders)
+
+  # --- Backend BaaS & Authentification (Supabase) ---
+  # >=2.13.0 requis pour les clés "publishable" (sb_publishable_...), qui
+  # remplacent l'ancienne clé anonyme JWT.
+  supabase_flutter: ^2.13.0           # Auth, Postgres, Storage, Realtime, Edge Functions
+
+  # --- State Management & Injection de Dépendances ---
+  flutter_riverpod: ^2.5.1            # Architecture réactive recommandée
+  riverpod_annotation: ^2.3.5
+
+  # --- Sécurité & Cache Local (Mode Hors-ligne) ---
+  flutter_secure_storage: ^9.0.0      # Stockage chiffré des jetons (Keystore / Keychain)
+  path_provider: ^2.1.2               # Gestion des répertoires de cache et documents
+  path: ^1.9.0
+
+  # --- Audio, Voix & Synthèse Multimodale (Discussion Vocale) ---
+  speech_to_text: ^7.4.0              # Reconnaissance vocale (STT) en français
+  flutter_tts: ^4.2.0                 # Synthèse vocale naturelle (TTS)
+  permission_handler: ^11.3.0         # Gestion des permissions Microphone & Stockage
+
+  # --- Utilitaires Réseau, Deep Linking & Utilitaires Métier ---
+  http: ^1.2.0                        # Appels HTTP directs et streaming SSE
+  url_launcher: ^6.2.5                # Ouverture sécurisée des liens PubMed, ANSM, HAS
+  file_picker: ^11.0.3                # Sélection de documents PDF/DOCX/TXT à téléverser
+  intl: ^0.19.0                       # Horodatage médical et localisation française
+  uuid: ^4.3.3                        # Génération d'identifiants de corrélation de requêtes
+  connectivity_plus: ^6.0.0           # Détection en temps réel du statut réseau
+
+# -----------------------------------------------------------------------------
+# DÉPENDANCES DE DÉVELOPPEMENT & TESTS
+# -----------------------------------------------------------------------------
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+  build_runner: ^2.4.8
+  riverpod_generator: ^2.4.0
+
+# -----------------------------------------------------------------------------
+# CONFIGURATION DES ASSETS & POLICES LOCALES
+# -----------------------------------------------------------------------------
+flutter:
+  uses-material-design: true
+
+  # Déclaration des répertoires d'assets locaux
+  assets:
+    - assets/images/
+    - assets/icons/
+    - assets/docs_sample/
+
+  # Police variable "Plus Jakarta Sans" (une seule fonte, 4 graisses statiques)
+  fonts:
+    - family: Plus Jakarta Sans
+      fonts:
+        - asset: assets/fonts/PlusJakartaSans-Variable.ttf
+          weight: 400
+        - asset: assets/fonts/PlusJakartaSans-Variable.ttf
+          weight: 500
+        - asset: assets/fonts/PlusJakartaSans-Variable.ttf
+          weight: 600
+        - asset: assets/fonts/PlusJakartaSans-Variable.ttf
+          weight: 700

@@ -1,0 +1,36 @@
+name: Build & deploy web version to Firebase Hosting
+
+on:
+  push:
+    branches:
+      - claude/creer-projet-ecrans-e3oqnb
+      - main
+  workflow_dispatch: {}
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build release web app
+        run: flutter build web --release
+
+      - name: Deploy to Firebase Hosting
+        # Le contexte `secrets` n'est pas autorisé dans une condition `if:` ;
+        # on réutilise `vars.FIREBASE_APP_ID` (même signal que build-android.yml)
+        # comme indicateur que Firebase est configuré côté dépôt.
+        if: ${{ vars.FIREBASE_APP_ID != '' }}
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          projectId: drugs-d1e2b
+          channelId: live

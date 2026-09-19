@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Fond de l'icône adaptative (Android 8+) : surface minérale claire
+         du design system "Serene Clinical Intelligence" — assure un bon
+         contraste avec le mortier bleu-nuit du premier plan. -->
+    <color name="ic_launcher_background">#EAF2F1</color>
+</resources>

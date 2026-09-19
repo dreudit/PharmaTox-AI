@@ -1,0 +1,53 @@
+project_id = "drugs-ia"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "storage"]
+extra_search_path = ["public"]
+max_rows = 1000
+
+[db]
+port = 54322
+major_version = 15
+
+[studio]
+enabled = true
+port = 54323
+
+[auth]
+enabled = true
+site_url = "http://localhost:3000"
+additional_redirect_urls = []
+jwt_expiry = 3600
+enable_signup = true
+
+[auth.email]
+enable_signup = true
+double_confirm_changes = true
+enable_confirmations = false
+
+[storage]
+enabled = true
+file_size_limit = "50MiB"
+
+[edge_runtime]
+enabled = true
+
+# verify_jwt=false : chaque fonction vérifie elle-même le JWT via
+# supabase.auth.getUser() dans son propre code. La vérification par
+# défaut de la plateforme (avant l'exécution du code) rejette sinon la
+# requête OPTIONS de préflight CORS envoyée par le navigateur (qui ne
+# contient jamais d'en-tête Authorization), ce qui bloque tout appel
+# web même avec des en-têtes CORS corrects côté fonction.
+[functions.chat]
+verify_jwt = false
+
+[functions.ingest-document]
+verify_jwt = false
+
+[functions.search-library]
+verify_jwt = false
+
+[functions.stt]
+verify_jwt = false
